@@ -1,0 +1,10 @@
+# 简化版依赖 - 不需要编译器
+fastapi==0.109.0
+uvicorn==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+dashscope==1.14.1
+python-dotenv==1.0.0
+requests==2.31.0
+

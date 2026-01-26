@@ -1,0 +1,127 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 虚拟环境
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 环境变量和配置
+.env
+.env.local
+.env.*.local
+*.env
+config.ini
+secrets.json
+
+# 日志文件
+*.log
+logs/
+*.log.*
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# 测试覆盖率
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# 项目特定
+test_images/
+uploads/
+temp/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+!docs/**/*.png
+!docs/**/*.jpg
+
+# 备份文件
+*.backup
+*.old
+
+# 编译文件
+*.pyc
+*.pyo
+*.pyd
+
+# 分发/打包
+*.manifest
+*.spec
+
+# 单元测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
