@@ -5,6 +5,7 @@ from app.db_models.user import User
 from app.db_models.diet_record import DietRecord
 from app.db_models.trip_plan import TripPlan
 from app.db_models.trip_item import TripItem
+from app.db_models.menu_recognition import MenuRecognition
 
-__all__ = ["User", "DietRecord", "TripPlan", "TripItem"]
+__all__ = ["User", "DietRecord", "TripPlan", "TripItem", "MenuRecognition"]
 

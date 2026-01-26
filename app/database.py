@@ -64,6 +64,7 @@ def init_db():
     import app.db_models.diet_record
     import app.db_models.trip_plan
     import app.db_models.trip_item
+    import app.db_models.menu_recognition
     
     # 创建所有表
     Base.metadata.create_all(bind=engine)

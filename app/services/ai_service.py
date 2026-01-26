@@ -6,6 +6,7 @@ import json
 import base64
 import tempfile
 from typing import List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import dashscope
 from dashscope import Generation
 
@@ -220,7 +221,7 @@ class AIService:
 
 要求提取的信息：
 1. destination: 目的地（城市或景点名称）
-2. startDate: 开始日期（YYYY-MM-DD格式，如果未指定则使用当前日期）
+2. startDate: 开始日期（YYYY-MM-DD格式，如果未指定则使用今天的日期）
 3. endDate: 结束日期（YYYY-MM-DD格式，如果未指定则根据天数推算）
 4. days: 行程天数（整数）
 5. travelers: 同行人员（数组，如["本人", "父母", "孩子"]）
@@ -231,8 +232,8 @@ class AIService:
 返回格式：
 {{
     "destination": "目的地",
-    "startDate": "2026-01-25",
-    "endDate": "2026-01-26",
+    "startDate": "2026-0x-xx",
+    "endDate": "2026-0x-xx",
     "days": 2,
     "travelers": ["本人", "孩子"],
     "budget": 2000
@@ -290,8 +291,20 @@ class AIService:
             if allergens:
                 preference_text += f"过敏原：{', '.join(allergens)}。"
         
-        start_date = intent.get("startDate", "2026-01-25")
-        end_date = intent.get("endDate", "2026-01-26")
+        # 如果没有提供日期，使用今天的日期
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        if "startDate" not in intent or not intent.get("startDate"):
+            start_date = today.strftime("%Y-%m-%d")
+        else:
+            start_date = intent.get("startDate")
+        
+        if "endDate" not in intent or not intent.get("endDate"):
+            # 根据开始日期和天数计算结束日期
+            start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_date = (start_date_obj + timedelta(days=days - 1)).strftime("%Y-%m-%d")
+        else:
+            end_date = intent.get("endDate")
         
         prompt = f"""请为以下行程生成详细的行程计划，并以JSON格式返回。
 
@@ -413,27 +426,71 @@ class AIService:
             if not dish_names:
                 return []
             
-            # 对每个菜品分析营养成分
+            # 并发分析每个菜品的营养成分
             dishes = []
-            for dish_name in dish_names:
-                # 获取营养数据
-                nutrition_data = self.analyze_food_nutrition(dish_name)
+            
+            def process_dish(dish_name: str) -> dict:
+                """处理单个菜品：分析营养并生成推荐"""
+                try:
+                    # 获取营养数据
+                    nutrition_data = self.analyze_food_nutrition(dish_name)
+                    
+                    # 根据健康目标生成推荐理由
+                    is_recommended, reason = self._generate_recommendation(
+                        nutrition_data, 
+                        health_goal
+                    )
+                    
+                    return {
+                        "name": dish_name,
+                        "calories": nutrition_data["calories"],
+                        "protein": nutrition_data["protein"],
+                        "fat": nutrition_data["fat"],
+                        "carbs": nutrition_data["carbs"],
+                        "isRecommended": is_recommended,
+                        "reason": reason
+                    }
+                except Exception as e:
+                    print(f"分析菜品 {dish_name} 失败: {str(e)}")
+                    # 返回基础信息，避免整个请求失败
+                    return {
+                        "name": dish_name,
+                        "calories": 0.0,
+                        "protein": 0.0,
+                        "fat": 0.0,
+                        "carbs": 0.0,
+                        "isRecommended": False,
+                        "reason": f"分析失败: {str(e)}"
+                    }
+            
+            # 使用线程池并发处理
+            with ThreadPoolExecutor(max_workers=min(len(dish_names), 5)) as executor:
+                # 提交所有任务
+                future_to_dish = {
+                    executor.submit(process_dish, dish_name): dish_name 
+                    for dish_name in dish_names
+                }
                 
-                # 根据健康目标生成推荐理由
-                is_recommended, reason = self._generate_recommendation(
-                    nutrition_data, 
-                    health_goal
-                )
+                # 收集结果（保持原始顺序）
+                dish_results = {}
+                for future in as_completed(future_to_dish):
+                    dish_name = future_to_dish[future]
+                    try:
+                        dish_results[dish_name] = future.result()
+                    except Exception as e:
+                        print(f"处理菜品 {dish_name} 时出错: {str(e)}")
+                        dish_results[dish_name] = {
+                            "name": dish_name,
+                            "calories": 0.0,
+                            "protein": 0.0,
+                            "fat": 0.0,
+                            "carbs": 0.0,
+                            "isRecommended": False,
+                            "reason": f"处理失败: {str(e)}"
+                        }
                 
-                dishes.append({
-                    "name": dish_name,
-                    "calories": nutrition_data["calories"],
-                    "protein": nutrition_data["protein"],
-                    "fat": nutrition_data["fat"],
-                    "carbs": nutrition_data["carbs"],
-                    "isRecommended": is_recommended,
-                    "reason": reason
-                })
+                # 按照原始顺序返回结果
+                dishes = [dish_results[dish_name] for dish_name in dish_names]
             
             return dishes
             

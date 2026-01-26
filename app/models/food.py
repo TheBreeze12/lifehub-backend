@@ -111,3 +111,106 @@ class RecognizeMenuResponse(BaseModel):
                 }
             }
         }
+
+
+class AddDietRecordRequest(BaseModel):
+    """添加饮食记录请求"""
+    userId: int = Field(..., description="用户ID")
+    foodName: str = Field(..., description="菜品名称", min_length=1, max_length=100)
+    calories: float = Field(..., description="热量（kcal）", ge=0)
+    protein: float = Field(0.0, description="蛋白质（g）", ge=0)
+    fat: float = Field(0.0, description="脂肪（g）", ge=0)
+    carbs: float = Field(0.0, description="碳水化合物（g）", ge=0)
+    mealType: str = Field(..., description="餐次: 早餐/午餐/晚餐/加餐 或 breakfast/lunch/dinner/snack")
+    recordDate: str = Field(..., description="记录日期（YYYY-MM-DD格式）")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "userId": 123,
+                "foodName": "宫保鸡丁",
+                "calories": 320.0,
+                "protein": 28.0,
+                "fat": 18.0,
+                "carbs": 15.0,
+                "mealType": "午餐",
+                "recordDate": "2026-01-23"
+            }
+        }
+
+
+class DietRecordData(BaseModel):
+    """饮食记录数据"""
+    id: int = Field(..., description="记录ID")
+    userId: int = Field(..., description="用户ID")
+    foodName: str = Field(..., description="菜品名称")
+    calories: float = Field(..., description="热量（kcal）")
+    protein: float = Field(0.0, description="蛋白质（g）")
+    fat: float = Field(0.0, description="脂肪（g）")
+    carbs: float = Field(0.0, description="碳水化合物（g）")
+    mealType: str = Field(..., description="餐次")
+    recordDate: str = Field(..., description="记录日期（YYYY-MM-DD）")
+    createdAt: str = Field(..., description="创建时间")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": 1,
+                "userId": 123,
+                "foodName": "宫保鸡丁",
+                "calories": 320.0,
+                "protein": 28.0,
+                "fat": 18.0,
+                "carbs": 15.0,
+                "mealType": "午餐",
+                "recordDate": "2026-01-23",
+                "createdAt": "2026-01-23T10:30:00"
+            }
+        }
+
+
+class DietRecordsByDateResponse(BaseModel):
+    """按日期分组的饮食记录响应"""
+    code: int = Field(200, description="状态码，200表示成功")
+    message: str = Field("获取成功", description="消息")
+    data: dict = Field(..., description="按日期分组的记录，格式: {\"2026-01-23\": [记录列表], ...}")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "获取成功",
+                "data": {
+                    "2026-01-23": [
+                        {
+                            "id": 1,
+                            "userId": 123,
+                            "foodName": "宫保鸡丁",
+                            "calories": 320.0,
+                            "protein": 28.0,
+                            "fat": 18.0,
+                            "carbs": 15.0,
+                            "mealType": "午餐",
+                            "recordDate": "2026-01-23",
+                            "createdAt": "2026-01-23T10:30:00"
+                        }
+                    ]
+                }
+            }
+        }
+
+
+class ApiResponse(BaseModel):
+    """通用API响应"""
+    code: int = Field(200, description="状态码，200表示成功")
+    message: str = Field("操作成功", description="消息")
+    data: dict | None = Field(None, description="响应数据")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "记录成功",
+                "data": None
+            }
+        }

@@ -1,19 +1,28 @@
 """
 食物相关API路由
 """
-from fastapi import APIRouter, HTTPException, File, UploadFile, Depends
+from fastapi import APIRouter, HTTPException, File, UploadFile, Depends, Form
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func, desc
 from typing import Optional
+from datetime import date, datetime
+from collections import defaultdict
 from app.models.food import (
     FoodRequest, 
     FoodResponse, 
     FoodData,
-    RecognizeMenuResponse
+    RecognizeMenuResponse,
+    AddDietRecordRequest,
+    DietRecordData,
+    DietRecordsByDateResponse,
+    ApiResponse
 )
+from app.db_models.diet_record import DietRecord
 from app.services.ai_service import AIService
 from app.database import get_db
 from app.db_models.user import User
+from app.db_models.menu_recognition import MenuRecognition
 
 router = APIRouter(prefix="/api/food", tags=["食物分析"])
 
@@ -54,7 +63,7 @@ async def analyze_food(request: FoodRequest):
 @router.post("/recognize", response_model=RecognizeMenuResponse)
 async def recognize_menu(
     image: UploadFile = File(..., description="菜单图片文件"),
-    userId: Optional[int] = None,
+    userId: Optional[str] = Form(None, description="用户ID（可选）"),
     db: Session = Depends(get_db)
 ):
     """
@@ -70,13 +79,34 @@ async def recognize_menu(
         
         # 获取用户健康目标（如果提供了userId）
         health_goal = None
+        user_id_int = None
         if userId:
-            user = db.query(User).filter(User.id == userId).first()
-            if user:
-                health_goal = user.health_goal
+            try:
+                user_id_int = int(userId)
+                user = db.query(User).filter(User.id == user_id_int).first()
+                if user:
+                    health_goal = user.health_goal
+            except ValueError:
+                pass
         
         # 调用AI服务识别菜单
         dishes = ai_service.recognize_menu_image(image.file, health_goal)
+        
+        # 保存识别结果到数据库（如果提供了userId）
+        if user_id_int:
+            try:
+                # 创建新的识别记录
+                recognition = MenuRecognition(
+                    user_id=user_id_int,
+                    dishes=dishes
+                )
+                db.add(recognition)
+                db.commit()
+                print(f"✓ 已保存用户 {user_id_int} 的识别结果，共 {len(dishes)} 个菜品")
+            except Exception as e:
+                print(f"警告: 保存识别结果失败: {str(e)}")
+                db.rollback()
+                # 即使保存失败，也返回识别结果
         
         # 构建响应
         return RecognizeMenuResponse(
@@ -92,6 +122,211 @@ async def recognize_menu(
     except Exception as e:
         print(f"识别菜单失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"识别菜单失败: {str(e)}")
+
+
+@router.get("/latest-recognition")
+async def get_latest_recognition(
+    userId: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    获取用户最新的菜单识别结果
+    
+    - **userId**: 用户ID（可选）
+    """
+    try:
+        # 查询最新的识别记录
+        query = db.query(MenuRecognition)
+        if userId:
+            query = query.filter(MenuRecognition.user_id == userId)
+        
+        latest = query.order_by(MenuRecognition.created_at.desc()).first()
+        
+        if not latest:
+            return RecognizeMenuResponse(
+                code=404,
+                message="未找到识别记录",
+                data={"dishes": []}
+            )
+        
+        return RecognizeMenuResponse(
+            code=200,
+            message="获取成功",
+            data={"dishes": latest.dishes}
+        )
+        
+    except Exception as e:
+        print(f"获取最新识别结果失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@router.post("/record", response_model=ApiResponse)
+async def add_diet_record(
+    request: AddDietRecordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    添加饮食记录
+    
+    - **userId**: 用户ID
+    - **foodName**: 菜品名称
+    - **calories**: 热量（kcal）
+    - **protein**: 蛋白质（g）
+    - **fat**: 脂肪（g）
+    - **carbs**: 碳水化合物（g）
+    - **mealType**: 餐次（早餐/午餐/晚餐/加餐 或 breakfast/lunch/dinner/snack）
+    - **recordDate**: 记录日期（YYYY-MM-DD格式）
+    """
+    try:
+        # 验证用户是否存在
+        user = db.query(User).filter(User.id == request.userId).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
+        
+        # 转换餐次格式（中文转英文）
+        meal_type_map = {
+            "早餐": "breakfast",
+            "午餐": "lunch",
+            "晚餐": "dinner",
+            "加餐": "snack",
+            "breakfast": "breakfast",
+            "lunch": "lunch",
+            "dinner": "dinner",
+            "snack": "snack"
+        }
+        meal_type = meal_type_map.get(request.mealType, request.mealType)
+        
+        # 解析日期
+        try:
+            record_date = datetime.strptime(request.recordDate, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+        
+        # 创建饮食记录
+        diet_record = DietRecord(
+            user_id=request.userId,
+            food_name=request.foodName,
+            calories=request.calories,
+            protein=request.protein,
+            fat=request.fat,
+            carbs=request.carbs,
+            meal_type=meal_type,
+            record_date=record_date
+        )
+        
+        db.add(diet_record)
+        db.commit()
+        db.refresh(diet_record)
+        
+        print(f"✓ 已添加用户 {request.userId} 的饮食记录: {request.foodName}")
+        
+        return ApiResponse(
+            code=200,
+            message="记录成功",
+            data=None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"添加饮食记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"添加记录失败: {str(e)}")
+
+
+@router.get("/records", response_model=DietRecordsByDateResponse)
+async def get_diet_records(
+    userId: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取用户所有饮食记录，按日期划分
+    
+    - **userId**: 用户ID
+    """
+    try:
+        # 查询用户的所有饮食记录
+        records = db.query(DietRecord).filter(
+            DietRecord.user_id == userId
+        ).order_by(desc(DietRecord.record_date), desc(DietRecord.created_at)).all()
+        
+        # 按日期分组
+        records_by_date = defaultdict(list)
+        for record in records:
+            date_str = record.record_date.strftime("%Y-%m-%d")
+            records_by_date[date_str].append({
+                "id": record.id,
+                "userId": record.user_id,
+                "foodName": record.food_name,
+                "calories": record.calories,
+                "protein": record.protein or 0.0,
+                "fat": record.fat or 0.0,
+                "carbs": record.carbs or 0.0,
+                "mealType": record.meal_type or "",
+                "recordDate": date_str,
+                "createdAt": record.created_at.strftime("%Y-%m-%dT%H:%M:%S") if record.created_at else ""
+            })
+        
+        # 转换为普通字典并按日期排序（最新的在前）
+        result = dict(sorted(records_by_date.items(), reverse=True))
+        
+        return DietRecordsByDateResponse(
+            code=200,
+            message="获取成功",
+            data=result
+        )
+        
+    except Exception as e:
+        print(f"获取饮食记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@router.get("/records/today", response_model=DietRecordsByDateResponse)
+async def get_today_diet_records(
+    userId: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取用户今天的饮食记录
+    
+    - **userId**: 用户ID
+    """
+    try:
+        today = date.today()
+        
+        # 查询今天的饮食记录
+        records = db.query(DietRecord).filter(
+            DietRecord.user_id == userId,
+            DietRecord.record_date == today
+        ).order_by(DietRecord.created_at).all()
+        
+        # 转换为列表格式
+        records_list = [{
+            "id": record.id,
+            "userId": record.user_id,
+            "foodName": record.food_name,
+            "calories": record.calories,
+            "protein": record.protein or 0.0,
+            "fat": record.fat or 0.0,
+            "carbs": record.carbs or 0.0,
+            "mealType": record.meal_type or "",
+            "recordDate": record.record_date.strftime("%Y-%m-%d"),
+            "createdAt": record.created_at.strftime("%Y-%m-%dT%H:%M:%S") if record.created_at else ""
+        } for record in records]
+        
+        # 按日期分组（虽然只有今天，但保持格式一致）
+        date_str = today.strftime("%Y-%m-%d")
+        result = {date_str: records_list}
+        
+        return DietRecordsByDateResponse(
+            code=200,
+            message="获取成功",
+            data=result
+        )
+        
+    except Exception as e:
+        print(f"获取今日饮食记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
 
 
 @router.get("/health")
