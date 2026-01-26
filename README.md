@@ -1,6 +1,12 @@
 # 智能生活服务工具 - 后端API
 
-FastAPI实现的后端服务，提供餐饮营养分析功能。
+基于FastAPI的后端服务，提供AI驱动的餐饮营养分析、菜单识别、饮食记录管理和智能行程规划功能。
+
+## ✨ 核心功能
+
+- 🍽️ **餐饮服务**：菜品营养分析、菜单图片识别、饮食记录管理
+- 🗺️ **行程规划**：AI生成个性化行程计划、行程管理
+- 👤 **用户中心**：用户偏好设置、健康目标管理
 
 ## 项目结构
 
@@ -9,17 +15,50 @@ backend/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py              # FastAPI应用入口
-│   ├── models/              # 数据模型
+│   ├── database.py          # 数据库配置和连接
+│   │
+│   ├── models/              # API数据模型（Pydantic）
 │   │   ├── __init__.py
-│   │   └── food.py
+│   │   ├── food.py          # 餐饮相关模型
+│   │   ├── trip.py          # 行程相关模型
+│   │   └── user.py          # 用户相关模型
+│   │
+│   ├── db_models/           # 数据库模型（SQLAlchemy）
+│   │   ├── __init__.py
+│   │   ├── user.py          # 用户表模型
+│   │   ├── diet_record.py   # 饮食记录表模型
+│   │   ├── menu_recognition.py  # 菜单识别记录模型
+│   │   ├── trip_plan.py     # 行程计划表模型
+│   │   └── trip_item.py     # 行程节点表模型
+│   │
 │   ├── routers/             # API路由
 │   │   ├── __init__.py
-│   │   └── food.py
+│   │   ├── food.py          # 餐饮API路由
+│   │   ├── trip.py          # 行程API路由
+│   │   └── user.py          # 用户API路由
+│   │
 │   └── services/            # 业务服务
 │       ├── __init__.py
-│       └── ai_service.py
-├── requirements.txt         # Python依赖
-├── env_example.txt          # 环境变量示例
+│       └── ai_service.py    # AI服务封装（通义千问、豆包AI）
+│
+├── utils/                    # 工具脚本
+│   ├── init_database.py     # 数据库初始化脚本
+│   └── ...
+│
+├── test/                     # 测试脚本
+│   ├── test_user_api.py
+│   ├── test_menu_recognize.py
+│   └── ...
+│
+├── docs/                     # 文档
+│   ├── 快速开始.md
+│   ├── API文档.md
+│   ├── 项目说明.md
+│   └── 数据库连接指南.md
+│
+├── requirements.txt          # Python依赖
+├── env_example.txt           # 环境变量示例
+├── start.bat                 # Windows启动脚本
 └── README.md
 ```
 
@@ -41,9 +80,35 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 配置环境变量
+### 2. 配置数据库
 
-复制 `env_example.txt` 为 `.env`，并填入您的API Key：
+#### 安装MySQL
+
+**Windows:**
+- 下载：https://dev.mysql.com/downloads/mysql/
+- 或使用XAMPP：https://www.apachefriends.org/
+
+**macOS/Linux:**
+```bash
+# macOS
+brew install mysql
+brew services start mysql
+
+# Linux (Ubuntu)
+sudo apt update
+sudo apt install mysql-server
+sudo systemctl start mysql
+```
+
+#### 创建数据库
+
+```sql
+CREATE DATABASE lifehub CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+### 3. 配置环境变量
+
+复制 `env_example.txt` 为 `.env`：
 
 ```bash
 # Windows
@@ -55,19 +120,35 @@ cp env_example.txt .env
 
 编辑 `.env` 文件：
 
-```
+```env
+# AI服务配置
 DASHSCOPE_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
+VOLC_ACCESS_KEY=你的火山引擎AccessKey（可选）
+VOLC_SECRET_KEY=你的火山引擎SecretKey（可选）
+
+# 数据库配置
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=你的数据库密码
+DB_NAME=lifehub
+
+# 服务器配置
 HOST=0.0.0.0
 PORT=8000
 ```
 
 **获取API Key：**
-1. 访问 https://dashscope.aliyuncs.com/
-2. 登录/注册阿里云账号
-3. 进入控制台获取API Key
-4. 新用户有免费额度
+- **通义千问**：访问 https://dashscope.aliyuncs.com/ 获取
+- **火山引擎豆包**：访问 https://console.volcengine.com/ 获取（可选）
 
-### 3. 运行服务
+### 4. 初始化数据库
+
+```bash
+python utils/init_database.py
+```
+
+### 5. 运行服务
 
 ```bash
 # 方法1：使用uvicorn命令
@@ -75,83 +156,15 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 方法2：直接运行main.py
 python -m app.main
+
+# 方法3：使用启动脚本（Windows）
+start.bat
 ```
 
 服务启动后：
-- API文档：http://localhost:8000/docs
-- 交互式文档：http://localhost:8000/redoc
-- 健康检查：http://localhost:8000/health
-
-## API接口
-
-### 1. 分析菜品营养
-
-**接口：** `POST /api/food/analyze`
-
-**请求体：**
-```json
-{
-  "food_name": "番茄炒蛋"
-}
-```
-
-**响应：**
-```json
-{
-  "success": true,
-  "message": "分析成功",
-  "data": {
-    "name": "番茄炒蛋",
-    "calories": 150.0,
-    "protein": 10.5,
-    "fat": 8.2,
-    "carbs": 6.3,
-    "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量。"
-  }
-}
-```
-
-### 2. 健康检查
-
-**接口：** `GET /health`
-
-**响应：**
-```json
-{
-  "status": "ok",
-  "api_key_configured": true
-}
-```
-
-## 测试API
-
-### 使用curl
-
-```bash
-# 测试菜品分析
-curl -X POST http://localhost:8000/api/food/analyze \
-  -H "Content-Type: application/json" \
-  -d "{\"food_name\": \"番茄炒蛋\"}"
-
-# 健康检查
-curl http://localhost:8000/health
-```
-
-### 使用Postman
-
-1. 创建POST请求：`http://localhost:8000/api/food/analyze`
-2. Headers添加：`Content-Type: application/json`
-3. Body选择raw，输入：
-   ```json
-   {
-     "food_name": "番茄炒蛋"
-   }
-   ```
-4. 点击Send
-
-### 使用浏览器
-
-访问 http://localhost:8000/docs 使用Swagger UI进行交互式测试。
+- **API文档**：http://localhost:8000/docs
+- **交互式文档**：http://localhost:8000/redoc
+- **健康检查**：http://localhost:8000/health
 
 ## Android连接说明
 
@@ -212,46 +225,6 @@ uvicorn app.main:app --reload --port 8001
 通义千问API首次调用可能较慢，后续会快一些。可以：
 - 添加缓存机制
 - 使用更快的模型（如qwen-plus）
-
-## 开发建议
-
-### 添加缓存
-
-```python
-# 可以使用Redis缓存AI结果
-from functools import lru_cache
-
-@lru_cache(maxsize=100)
-def cached_analyze(food_name: str):
-    return ai_service.analyze_food_nutrition(food_name)
-```
-
-### 日志记录
-
-```python
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-logger.info(f"分析食物: {food_name}")
-```
-
-### 数据库存储
-
-后续可以添加数据库存储用户查询历史：
-```python
-# 使用SQLAlchemy
-from sqlalchemy import create_engine
-```
-
-## 下一步
-
-- [ ] 添加用户认证
-- [ ] 添加查询历史记录
-- [ ] 添加Redis缓存
-- [ ] 添加更多菜品分析功能
-- [ ] 实现出行规划API
 
 ## 技术栈
 
