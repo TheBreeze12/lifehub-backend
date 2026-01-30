@@ -22,10 +22,10 @@ class TripItem(Base):
     place_name = Column(String(100), nullable=False, comment="地点名称")
     place_type = Column(
         String(20),
-        comment="类型: attraction/dining/transport/accommodation"
+        comment="类型: walking/running/cycling/park/gym/indoor/outdoor (运动类型) 或 attraction/dining/transport/accommodation (兼容旧数据)"
     )
     duration = Column(Integer, comment="预计时长（分钟）")
-    cost = Column(Float, comment="预计费用（元）")
+    cost = Column(Float, comment="预计消耗卡路里（kcal），原为费用字段，现语义转换为卡路里")
     latitude = Column(Float, comment="纬度")
     longitude = Column(Float, comment="经度")
     notes = Column(Text, comment="备注")

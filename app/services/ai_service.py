@@ -5,10 +5,19 @@ import os
 import json
 import base64
 import tempfile
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import dashscope
 from dashscope import Generation
+
+# 尝试导入地理编码库（可选）
+try:
+    from geopy.geocoders import Nominatim
+    from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+    GEOCODING_AVAILABLE = True
+except ImportError:
+    GEOCODING_AVAILABLE = False
+    print("警告: 未安装geopy，地理编码功能将不可用，将使用经纬度坐标")
 
 # 尝试导入火山引擎SDK（可选）
 try:
@@ -51,6 +60,17 @@ class AIService:
                     print("菜品识别和分析功能将不可用")
             else:
                 print("警告: 未设置ARK_API_KEY，菜单识别功能将不可用")
+        
+        # 初始化地理编码器（用于将经纬度转换为地理位置）
+        self.geocoder = None
+        if GEOCODING_AVAILABLE:
+            try:
+                # 使用Nominatim服务（免费，无需API key）
+                self.geocoder = Nominatim(user_agent="lifehub_app")
+                print("✓ 地理编码服务初始化成功")
+            except Exception as e:
+                print(f"警告: 地理编码服务初始化失败: {e}")
+                print("将使用经纬度坐标，不进行地理编码")
     
     def analyze_food_nutrition(self, food_name: str) -> dict:
         """
@@ -194,50 +214,163 @@ class AIService:
             "recommendation": f"{food_name}的营养数据暂时无法获取，建议适量食用。"
         }
     
-    def generate_trip(self, query: str, preferences: dict = None) -> dict:
+    def generate_trip(self, query: str, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None) -> dict:
         """
-        生成行程计划
+        生成运动计划（餐后运动规划）
         
         Args:
-            query: 用户查询文本
+            query: 用户查询文本（如"规划餐后运动，消耗300卡路里"）
             preferences: 用户偏好（健康目标、过敏原等）
+            calories_intake: 今日已摄入卡路里
+            user_location: 用户位置信息 {"latitude": float, "longitude": float}
             
         Returns:
-            包含行程数据的字典
+            包含运动计划数据的字典
         """
-        # 第一步：提取意图
-        intent = self._extract_trip_intent(query, preferences)
+        # 第一步：提取运动意图
+        intent = self._extract_exercise_intent(query, preferences, calories_intake, user_location)
         
-        # 第二步：生成行程
-        trip_data = self._generate_trip_plan(intent, preferences)
+        # 第二步：生成运动计划（传递query以便识别城市）
+        trip_data = self._generate_exercise_plan(intent, preferences, calories_intake, user_location, query)
         
         return trip_data
     
-    def _extract_trip_intent(self, query: str, preferences: dict = None) -> dict:
-        """提取行程意图（时间、目的地、人群等）"""
-        prompt = f"""请从以下用户查询中提取行程规划的关键信息，并以JSON格式返回。
+    def _reverse_geocode(self, latitude: float, longitude: float) -> Optional[Dict[str, str]]:
+        """逆地理编码：将经纬度转换为地理位置信息"""
+        if not self.geocoder:
+            return None
+        
+        try:
+            location = self.geocoder.reverse((latitude, longitude), timeout=5, language='zh')
+            if location:
+                address = location.raw.get('address', {})
+                return {
+                    'city': address.get('city') or address.get('town') or address.get('village', ''),
+                    'district': address.get('suburb') or address.get('district') or address.get('county', ''),
+                    'province': address.get('state') or address.get('province', ''),
+                    'country': address.get('country', ''),
+                    'full_address': location.address or ''
+                }
+        except (GeocoderTimedOut, GeocoderServiceError, Exception) as e:
+            print(f"地理编码失败: {str(e)}")
+            return None
+        
+        return None
+    
+    def _extract_exercise_intent(self, query: str, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None) -> dict:
+        """提取运动意图（卡路里目标、运动类型、时间等）"""
+        calories_info = ""
+        if calories_intake > 0:
+            calories_info = f"\n用户今日已摄入卡路里：{calories_intake:.1f} kcal"
+        
+        # 优先从查询中提取城市信息（如"我在北京"、"北京"等）
+        query_city = None
+        city_keywords = ["北京", "上海", "广州", "深圳", "杭州", "成都", "武汉", "西安", "南京", "重庆", 
+                        "天津", "苏州", "长沙", "郑州", "东莞", "青岛", "沈阳", "宁波", "昆明", "大连"]
+        for city in city_keywords:
+            if city in query:
+                query_city = city
+                break
+        
+        # 位置信息提示
+        location_hint = ""
+        detected_city = None
+        
+        # 优先使用查询中提到的城市
+        if query_city:
+            detected_city = query_city
+            location_hint = f"""
+用户查询中明确提到了城市：{query_city}
+重要：请优先使用查询中提到的城市信息，而不是GPS位置信息。
+请根据用户查询中提到的城市（{query_city}），在destination字段中生成具体的地点名称：
+- 如果查询中明确指定了地点类型（如"公园"、"健身房"、"步道"等），请结合{query_city}生成具体名称，例如"{query_city}中央公园"、"{query_city}滨江健身步道"、"{query_city}XX体育中心"等
+- 如果查询中没有指定地点，请根据{query_city}生成一个合理的运动地点名称，例如"{query_city}中央公园"、"{query_city}世纪公园"、"{query_city}XX社区健身步道"等
+- 重要：不要使用"附近"、"附近XX"、"当前位置附近"这样的模糊描述，必须生成具体的地点名称，并包含城市信息（如"{query_city}XX公园"、"{query_city}XX健身步道"等）
+"""
+        elif user_location:
+            lat = user_location['latitude']
+            lon = user_location['longitude']
+            
+            # 尝试进行地理编码，获取具体地理位置
+            geo_info = self._reverse_geocode(lat, lon)
+            
+            if geo_info:
+                # 构建地理位置描述
+                location_parts = []
+                if geo_info.get('city'):
+                    location_parts.append(geo_info['city'])
+                    detected_city = geo_info['city']
+                if geo_info.get('district'):
+                    location_parts.append(geo_info['district'])
+                if geo_info.get('province'):
+                    location_parts.append(geo_info['province'])
+                
+                location_desc = '、'.join(location_parts) if location_parts else geo_info.get('full_address', '')
+                
+                location_hint = f"""
+用户GPS位置：{location_desc}（纬度 {lat:.6f}, 经度 {lon:.6f}）
+请根据用户所在城市和区域，在destination字段中生成具体的地点名称：
+- 如果查询中明确指定了地点类型（如"公园"、"健身房"、"步道"等），请结合用户所在城市生成具体名称，例如"{detected_city}中央公园"、"{detected_city}滨江健身步道"、"{detected_city}XX体育中心"等
+- 如果查询中没有指定地点，请根据用户所在城市和区域生成一个合理的运动地点名称，例如"{detected_city}中央公园"、"{detected_city}世纪公园"、"{detected_city}XX社区健身步道"等
+- 重要：不要使用"附近"、"附近XX"、"当前位置附近"这样的模糊描述，必须生成具体的地点名称，并包含城市信息（如"{detected_city}XX公园"、"{detected_city}XX健身步道"等）
+"""
+            else:
+                # 如果地理编码失败，使用经纬度
+                location_hint = f"""
+用户GPS位置：纬度 {lat:.6f}, 经度 {lon:.6f}
+请根据用户位置信息，在destination字段中生成具体的地点名称：
+- 如果查询中明确指定了地点类型（如"公园"、"健身房"、"步道"等），请结合位置信息生成具体名称，例如"中央公园"、"滨江健身步道"、"XX体育中心"等
+- 如果查询中没有指定地点，请根据位置信息生成一个合理的运动地点名称，例如"中央公园"、"社区健身步道"等
+- 重要：不要使用"附近"、"附近XX"、"当前位置附近"这样的模糊描述，必须生成具体的地点名称（如"中央公园"、"XX健身步道"等）
+"""
+        
+        prompt = f"""请从以下用户查询中提取餐后运动规划的关键信息，并以JSON格式返回。
 
 用户查询："{query}"
+{calories_info}
+{location_hint}
 
 要求提取的信息：
-1. destination: 目的地（城市或景点名称）
-2. startDate: 开始日期（YYYY-MM-DD格式，如果未指定则使用今天的日期）
-3. endDate: 结束日期（YYYY-MM-DD格式，如果未指定则根据天数推算）
-4. days: 行程天数（整数）
-5. travelers: 同行人员（数组，如["本人", "父母", "孩子"]）
-6. budget: 预算（整数，单位：元，如果未指定则为null）
+1. destination: 运动区域/起点（必须是具体的地点名称，不要使用"附近"、"附近XX"、"当前位置附近"等模糊描述）
+   - 优先识别查询中明确提到的城市和地点（如"我在北京"、"北京XX公园"等），直接使用查询中的城市信息
+   - 如果查询中明确指定了地点（如"XX公园"、"健身房"等），直接使用该地点名称，并包含城市信息
+   - 如果查询中只指定了地点类型（如"公园"、"步道"），请结合位置信息中的城市生成一个具体的地点名称（如"北京中央公园"、"上海滨江健身步道"等）
+   - 如果查询中没有指定地点，请根据位置信息中的城市生成一个合理的具体地点名称（如"北京中央公园"、"上海世纪公园"等）
+2. startDate: 运动开始日期（YYYY-MM-DD格式）
+   - 如果查询中提到"今天"、"今日"，使用今天的日期
+   - 如果查询中提到"明天"、"明日"，使用明天的日期
+   - 如果查询中提到"周末"、"周六"、"周日"，计算最近的周末日期
+   - 如果查询中提到具体日期（如"1月27日"），转换为YYYY-MM-DD格式
+   - 如果未指定，使用今天的日期
+3. endDate: 运动结束日期（YYYY-MM-DD格式）
+   - 如果查询中提到"周末"（通常指周六和周日两天），endDate应该是周日的日期
+   - 如果查询中提到"三天"、"3天"等，endDate应该是startDate之后2天的日期
+   - 如果查询中提到"一周"、"7天"等，endDate应该是startDate之后6天的日期
+   - 如果未指定多天，endDate通常与startDate相同
+4. days: 运动天数（整数）
+   - 如果查询中提到"周末"，days应该是2（周六和周日）
+   - 如果查询中提到"三天"、"3天"等，days应该是3
+   - 如果查询中提到"一周"、"7天"等，days应该是7
+   - 如果未指定，days通常是1
+5. calories_target: 目标消耗卡路里（整数，单位：kcal，如果未指定则根据已摄入卡路里推算）
+6. exercise_type: 运动类型偏好（如"散步"、"跑步"、"骑行"等，如果未指定则为null）
 
 只返回JSON，不要其他解释。
 
-返回格式：
+返回格式示例：
 {{
-    "destination": "目的地",
-    "startDate": "2026-0x-xx",
-    "endDate": "2026-0x-xx",
-    "days": 2,
-    "travelers": ["本人", "孩子"],
-    "budget": 2000
-}}"""
+    "destination": "中央公园",
+    "startDate": "2026-01-27",
+    "endDate": "2026-01-27",
+    "days": 1,
+    "calories_target": 300,
+    "exercise_type": "散步"
+}}
+
+注意：
+- 如果查询中提到"周末"，需要计算最近的周六和周日日期，days=2
+- destination必须是具体地点名称，不能包含"附近"、"附近XX"等模糊词汇
+"""
         
         try:
             response = Generation.call(
@@ -255,6 +388,26 @@ class AIService:
                 if json_start != -1 and json_end > json_start:
                     json_str = content[json_start:json_end]
                     intent = json.loads(json_str)
+                    
+                    # 后处理：修复日期和天数
+                    intent = self._fix_date_and_days(intent)
+                    
+                    # 如果没有指定卡路里目标，根据已摄入卡路里推算
+                    if not intent.get("calories_target") and calories_intake > 0:
+                        # 建议消耗已摄入卡路里的30-50%
+                        intent["calories_target"] = int(calories_intake * 0.4)
+                    elif not intent.get("calories_target"):
+                        intent["calories_target"] = 200  # 默认200卡路里
+                    
+                    # 确保destination不包含"附近"等模糊词汇
+                    destination = intent.get("destination", "")
+                    if "附近" in destination or destination.startswith("附近"):
+                        # 移除"附近"前缀，生成具体名称
+                        destination = destination.replace("附近", "").strip()
+                        if not destination:
+                            destination = "运动场所"
+                        intent["destination"] = destination
+                    
                     return intent
                 else:
                     raise ValueError("未找到JSON数据")
@@ -262,34 +415,126 @@ class AIService:
                 raise Exception(f"API调用失败: {response.message}")
                 
         except Exception as e:
-            print(f"提取意图失败: {str(e)}")
+            print(f"提取运动意图失败: {str(e)}")
             # 返回默认意图
             from datetime import datetime, timedelta
             today = datetime.now().date()
+            calories_target = int(calories_intake * 0.4) if calories_intake > 0 else 200
+            # 如果用户提供了位置，destination使用"当前位置附近"，否则使用"附近"
+            default_destination = "当前位置附近" if user_location else "附近"
             return {
-                "destination": "未指定",
+                "destination": default_destination,
                 "startDate": today.strftime("%Y-%m-%d"),
-                "endDate": (today + timedelta(days=1)).strftime("%Y-%m-%d"),
+                "endDate": today.strftime("%Y-%m-%d"),
                 "days": 1,
-                "travelers": ["本人"],
-                "budget": None
+                "calories_target": calories_target,
+                "exercise_type": None
             }
     
-    def _generate_trip_plan(self, intent: dict, preferences: dict = None) -> dict:
-        """生成行程计划"""
-        destination = intent.get("destination", "未指定")
+    def _generate_exercise_plan(self, intent: dict, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None, query: str = "") -> dict:
+        """生成运动计划"""
+        destination = intent.get("destination", "附近")
+        # 如果destination仍然是模糊描述，且用户提供了位置，尝试生成更具体的描述
+        if user_location and destination in ["附近", "当前位置附近", "附近公园", "附近步道"]:
+            # 根据位置信息生成一个更具体的地点名称
+            # 这里可以根据需要接入地理编码API，或者使用AI生成
+            # 暂时使用一个通用的描述，但会在prompt中要求AI生成具体名称
+            destination = "附近运动场所"  # 这个会在prompt中被AI替换为具体名称
+        
         days = intent.get("days", 1)
-        travelers = intent.get("travelers", ["本人"])
+        calories_target = intent.get("calories_target", 200)
+        exercise_type = intent.get("exercise_type")
         
         # 构建Prompt
         preference_text = ""
         if preferences:
             health_goal = preferences.get("healthGoal")
-            allergens = preferences.get("allergens", [])
             if health_goal:
-                preference_text += f"健康目标：{health_goal}。"
-            if allergens:
-                preference_text += f"过敏原：{', '.join(allergens)}。"
+                health_goal_map = {
+                    "reduce_fat": "减脂",
+                    "gain_muscle": "增肌",
+                    "control_sugar": "控糖",
+                    "balanced": "均衡"
+                }
+                preference_text += f"健康目标：{health_goal_map.get(health_goal, health_goal)}。"
+        
+        calories_context = ""
+        if calories_intake > 0:
+            calories_context = f"\n用户今日已摄入卡路里：{calories_intake:.1f} kcal，建议通过运动消耗约 {calories_target} kcal。"
+        
+        # 优先从查询中提取城市信息
+        query_city = None
+        city_keywords = ["北京", "上海", "广州", "深圳", "杭州", "成都", "武汉", "西安", "南京", "重庆", 
+                        "天津", "苏州", "长沙", "郑州", "东莞", "青岛", "沈阳", "宁波", "昆明", "大连"]
+        for city in city_keywords:
+            if city in query:
+                query_city = city
+                break
+        
+        # 从intent的destination中提取城市（如果AI已经识别）
+        detected_city = None
+        if "destination" in intent:
+            dest = intent.get("destination", "")
+            for city in city_keywords:
+                if city in dest:
+                    detected_city = city
+                    break
+        
+        # 优先使用查询中的城市
+        final_city = query_city or detected_city
+        
+        location_context = ""
+        if final_city:
+            # 如果检测到城市（来自查询或intent），优先使用
+            location_context = f"""
+用户所在城市：{final_city}（优先使用查询中提到的城市信息）
+重要提示：
+1. 请根据用户所在城市（{final_city}），在placeName字段中生成具体、真实的地点名称（如"{final_city}中央公园"、"{final_city}滨江健身步道"、"{final_city}XX体育中心"等）
+2. 不要使用"附近公园"、"附近步道"这样的模糊描述，要生成具体的地点名称，并包含城市信息
+3. 可以根据{final_city}的城市特征生成合理的地点名称（例如：如果在北京，可以是"北京中央公园"、"北京奥林匹克公园"、"北京朝阳公园"等；如果在上海，可以是"上海世纪公园"、"上海滨江健身步道"、"上海外滩"等）
+4. **地点多样性**：如果有多个运动节点，每个节点的placeName必须不同，要推荐{final_city}不同的运动地点（如"北京中央公园"、"北京奥林匹克公园"、"北京朝阳公园"、"北京颐和园"等）
+5. 所有地点名称都应该包含城市信息，例如"{final_city}XX公园"、"{final_city}XX健身步道"等
+"""
+        elif user_location:
+            lat = user_location['latitude']
+            lon = user_location['longitude']
+            
+            # 尝试进行地理编码，获取具体地理位置
+            geo_info = self._reverse_geocode(lat, lon)
+            
+            if geo_info:
+                # 构建地理位置描述
+                location_parts = []
+                city_name = None
+                if geo_info.get('city'):
+                    location_parts.append(geo_info['city'])
+                    city_name = geo_info['city']
+                if geo_info.get('district'):
+                    location_parts.append(geo_info['district'])
+                if geo_info.get('province'):
+                    location_parts.append(geo_info['province'])
+                
+                location_desc = '、'.join(location_parts) if location_parts else geo_info.get('full_address', '')
+                
+                location_context = f"""
+用户GPS位置：{location_desc}（纬度 {lat:.6f}, 经度 {lon:.6f}）
+重要提示：
+1. 请根据用户所在城市和区域，在placeName字段中生成具体、真实的地点名称（如"{city_name}中央公园"、"{city_name}滨江健身步道"、"{city_name}XX体育中心"等）
+2. 不要使用"附近公园"、"附近步道"这样的模糊描述，要生成具体的地点名称，并包含城市信息
+3. 可以根据用户所在城市和区域特征生成合理的地点名称
+4. **地点多样性**：如果有多个运动节点，每个节点的placeName必须不同，要推荐不同的运动地点
+5. 所有地点名称都应该包含城市信息，例如"{city_name}XX公园"、"{city_name}XX健身步道"等
+"""
+            else:
+                # 如果地理编码失败，使用经纬度
+                location_context = f"""
+用户GPS位置：纬度 {lat:.6f}, 经度 {lon:.6f}
+重要提示：
+1. 请根据用户位置信息，在placeName字段中生成具体、真实的地点名称（如"XX公园"、"XX健身步道"、"XX体育中心"等）
+2. 不要使用"附近公园"、"附近步道"这样的模糊描述，要生成具体的地点名称
+3. **地点多样性**：如果有多个运动节点，每个节点的placeName必须不同，要推荐不同的运动地点
+4. 可以根据位置特征生成合理的地点名称（例如：如果在城市中心，可以是"中央公园"；如果在住宅区，可以是"XX社区公园"等）
+"""
         
         # 如果没有提供日期，使用今天的日期
         from datetime import datetime, timedelta
@@ -300,50 +545,87 @@ class AIService:
             start_date = intent.get("startDate")
         
         if "endDate" not in intent or not intent.get("endDate"):
-            # 根据开始日期和天数计算结束日期
             start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
             end_date = (start_date_obj + timedelta(days=days - 1)).strftime("%Y-%m-%d")
         else:
             end_date = intent.get("endDate")
         
-        prompt = f"""请为以下行程生成详细的行程计划，并以JSON格式返回。
+        exercise_type_text = f"运动类型：{exercise_type}。" if exercise_type else ""
+        
+        # 生成个性化标题提示
+        title_hint = f"""
+重要：title字段必须根据用户查询内容生成个性化、有意义的标题，不要总是使用"餐后运动计划"。
+标题应该：
+- 反映运动类型（如"周末慢跑计划"、"散步健身计划"）
+- 反映时间特征（如"周末运动计划"、"三日运动计划"）
+- 反映地点特征（如"公园健走计划"、"健身房训练计划"）
+- 简洁明了，10-15个字左右
+示例：如果用户查询"周末慢跑"，标题可以是"周末慢跑健身计划"；如果查询"餐后散步30分钟"，标题可以是"餐后散步计划"
+"""
+        
+        prompt = f"""请为以下餐后运动需求生成详细的运动计划，并以JSON格式返回。
 
-目的地：{destination}
-行程天数：{days}天
-同行人员：{', '.join(travelers)}
+运动区域：{destination}
+运动日期：{start_date} 至 {end_date}（共{days}天）
+目标消耗卡路里：{calories_target} kcal
+{exercise_type_text}
 {preference_text}
+{calories_context}
+{location_context}
+
+{title_hint}
 
 要求：
-1. 生成每天的具体行程安排，包括景点、餐饮、交通等
-2. 合理安排时间，避免行程过于紧张
-3. 考虑同行人员的特点（如带娃需要考虑适合孩子的景点）
-4. 餐饮推荐要考虑健康目标和过敏原
-5. 每个节点需要包含：dayIndex（第几天）、startTime（开始时间HH:mm）、placeName（地点名称）、placeType（类型：attraction/dining/transport/accommodation）、duration（预计时长，分钟）、notes（备注）
+1. 生成具体的运动安排，包括运动类型、地点、时长等
+2. 合理安排运动强度和时间，确保能达到目标卡路里消耗
+3. 考虑餐后运动的特点（建议餐后30-60分钟开始）
+4. 根据运动类型和用户位置推荐合适的运动地点
+5. 如果days>1，需要为每一天生成运动节点，dayIndex从1开始递增
+6. 每个节点需要包含：
+   - dayIndex: 第几天（从1开始，如果days>1，需要为每一天生成节点）
+   - startTime: 开始时间（HH:mm格式，建议餐后时间）
+   - placeName: 运动地点名称（必须是具体的地点名称，如"中央公园"、"滨江健身步道"、"XX体育中心"等，绝对不要使用"附近公园"、"附近XX"、"附近"等模糊描述）
+   - placeType: 运动类型（walking/running/cycling/park/gym/indoor/outdoor）
+   - duration: 运动时长（分钟）
+   - cost: 预计消耗卡路里（kcal，注意：这里用cost字段存储卡路里）
+   - notes: 运动建议、注意事项等
+
+重要：
+1. title必须个性化，不要总是"餐后运动计划"
+2. placeName字段必须包含具体的地点名称，不能是"附近"、"附近XX"这样的模糊描述
+3. 如果days>1，需要为每一天生成至少一个运动节点
+4. **地点多样性要求**：如果有多个运动节点（items数组中有多个元素），每个节点的placeName必须不同，要推荐不同的运动地点。例如：
+   - 如果生成4个节点，可以分别是："中央公园"、"滨江健身步道"、"XX体育中心"、"社区健身广场"
+   - 不要所有节点都使用同一个地点名称
+   - 可以根据不同的运动类型推荐不同的地点（如散步在公园，跑步在步道，力量训练在健身房等）
+5. **优先使用查询中的城市信息**：如果用户查询中明确提到了城市（如"我在北京"、"北京"等），请优先使用查询中的城市信息，而不是GPS位置信息
 
 只返回JSON，不要其他解释。
 
 返回格式：
 {{
-    "title": "行程标题",
+    "title": "周末慢跑健身计划",
     "destination": "{destination}",
     "startDate": "{start_date}",
     "endDate": "{end_date}",
     "items": [
         {{
             "dayIndex": 1,
-            "startTime": "09:00",
-            "placeName": "景点名称",
-            "placeType": "attraction",
-            "duration": 180,
-            "notes": "建议游玩3小时"
+            "startTime": "19:00",
+            "placeName": "中央公园",
+            "placeType": "walking",
+            "duration": 30,
+            "cost": 150,
+            "notes": "餐后散步，建议慢走"
         }},
         {{
             "dayIndex": 1,
-            "startTime": "12:30",
-            "placeName": "餐厅名称",
-            "placeType": "dining",
-            "duration": 90,
-            "notes": "推荐菜品"
+            "startTime": "20:00",
+            "placeName": "滨江健身步道",
+            "placeType": "running",
+            "duration": 20,
+            "cost": 150,
+            "notes": "慢跑，注意控制强度"
         }}
     ]
 }}"""
@@ -364,6 +646,16 @@ class AIService:
                 if json_start != -1 and json_end > json_start:
                     json_str = content[json_start:json_end]
                     trip_data = json.loads(json_str)
+                    # 确保有travelers字段（兼容性）
+                    if "travelers" not in trip_data:
+                        trip_data["travelers"] = ["本人"]
+                    
+                    # 后处理：确保destination和placeName都是具体的地点名称
+                    trip_data = self._ensure_specific_locations(trip_data, user_location)
+                    
+                    # 后处理：确保地点多样性
+                    trip_data = self._ensure_location_diversity(trip_data)
+                    
                     return trip_data
                 else:
                     raise ValueError("未找到JSON数据")
@@ -371,32 +663,219 @@ class AIService:
                 raise Exception(f"API调用失败: {response.message}")
                 
         except Exception as e:
-            print(f"生成行程失败: {str(e)}")
-            # 返回默认行程
-            return self._get_default_trip(intent)
+            print(f"生成运动计划失败: {str(e)}")
+            # 返回默认运动计划
+            return self._get_default_exercise_plan(intent, calories_target)
     
-    def _get_default_trip(self, intent: dict) -> dict:
-        """返回默认行程（当AI调用失败时）"""
-        destination = intent.get("destination", "未指定")
-        start_date = intent.get("startDate", "2026-01-25")
-        end_date = intent.get("endDate", "2026-01-26")
+    def _fix_date_and_days(self, intent: dict) -> dict:
+        """修复日期和天数，处理周末、多天等情况"""
+        from datetime import datetime, timedelta
+        
+        today = datetime.now().date()
+        start_date_str = intent.get("startDate")
+        end_date_str = intent.get("endDate")
         days = intent.get("days", 1)
-        travelers = intent.get("travelers", ["本人"])
+        
+        # 如果startDate和endDate都存在，计算实际天数
+        if start_date_str and end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                actual_days = (end_date - start_date).days + 1
+                if actual_days > 0:
+                    intent["days"] = actual_days
+            except:
+                pass
+        
+        # 如果只有startDate，根据days计算endDate
+        if start_date_str and not end_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = start_date + timedelta(days=days - 1)
+                intent["endDate"] = end_date.strftime("%Y-%m-%d")
+            except:
+                if not end_date_str:
+                    intent["endDate"] = start_date_str
+        
+        # 如果只有days，计算endDate
+        if start_date_str and days > 1:
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                end_date = start_date + timedelta(days=days - 1)
+                intent["endDate"] = end_date.strftime("%Y-%m-%d")
+            except:
+                pass
+        
+        return intent
+    
+    def _ensure_location_diversity(self, trip_data: dict) -> dict:
+        """确保多个运动节点使用不同的地点，增加地点多样性"""
+        if "items" not in trip_data or len(trip_data["items"]) <= 1:
+            return trip_data
+        
+        items = trip_data["items"]
+        used_places = set()
+        place_variations = [
+            "中央公园", "世纪公园", "奥林匹克公园", "滨江健身步道", "社区健身广场",
+            "体育中心", "健身步道", "森林公园", "文化公园", "运动公园",
+            "健身中心", "体育场", "运动场", "健身广场", "健康步道"
+        ]
+        
+        for i, item in enumerate(items):
+            place_name = item.get("placeName", "")
+            place_type = item.get("placeType", "walking")
+            
+            # 如果地点名称已使用，生成一个新的
+            if place_name in used_places:
+                # 根据运动类型选择合适的地点
+                if place_type == "walking":
+                    new_places = ["健身步道", "公园", "社区广场", "健康步道"]
+                elif place_type == "running":
+                    new_places = ["跑步道", "健身步道", "运动场", "体育场"]
+                elif place_type == "cycling":
+                    new_places = ["骑行道", "自行车道", "绿道", "健身步道"]
+                elif place_type == "park":
+                    new_places = ["公园", "森林公园", "文化公园", "运动公园"]
+                elif place_type == "gym":
+                    new_places = ["健身房", "健身中心", "体育中心", "运动中心"]
+                else:
+                    new_places = place_variations
+                
+                # 选择一个未使用的地点
+                for new_place in new_places:
+                    if new_place not in used_places:
+                        # 如果有城市前缀，保留城市前缀
+                        if place_name and any(city in place_name for city in ["北京", "上海", "广州", "深圳", "杭州", "成都"]):
+                            city_prefix = ""
+                            for city in ["北京", "上海", "广州", "深圳", "杭州", "成都"]:
+                                if city in place_name:
+                                    city_prefix = city
+                                    break
+                            item["placeName"] = f"{city_prefix}{new_place}" if city_prefix else new_place
+                        else:
+                            item["placeName"] = new_place
+                        used_places.add(item["placeName"])
+                        break
+            else:
+                used_places.add(place_name)
+        
+        return trip_data
+    
+    def _ensure_specific_locations(self, trip_data: dict, user_location: dict = None) -> dict:
+        """确保destination和placeName都是具体的地点名称，而不是模糊描述"""
+        # 模糊描述的常见模式
+        vague_patterns = ["附近", "当前位置附近", "附近公园", "附近步道", "附近健身房", "小区周边"]
+        
+        destination = trip_data.get("destination", "")
+        # 如果destination包含"附近"等模糊词汇，移除它们
+        if "附近" in destination:
+            destination = destination.replace("附近", "").strip()
+            if not destination:
+                destination = "运动场所"
+            trip_data["destination"] = destination
+        elif destination in vague_patterns or not destination:
+            if user_location:
+                trip_data["destination"] = "运动场所"
+            else:
+                trip_data["destination"] = "运动场所"
+        
+        # 处理items中的placeName
+        if "items" in trip_data:
+            for item in trip_data["items"]:
+                place_name = item.get("placeName", "")
+                # 如果placeName包含"附近"等模糊词汇，移除它们
+                if "附近" in place_name:
+                    place_name = place_name.replace("附近", "").strip()
+                    if not place_name:
+                        # 根据placeType生成一个具体名称
+                        place_type = item.get("placeType", "walking")
+                        type_name_map = {
+                            "walking": "健身步道",
+                            "running": "跑步道",
+                            "cycling": "骑行道",
+                            "park": "中央公园",
+                            "gym": "健身房",
+                            "indoor": "室内运动场",
+                            "outdoor": "户外运动场"
+                        }
+                        place_name = type_name_map.get(place_type, "运动场所")
+                    item["placeName"] = place_name
+                elif place_name in vague_patterns or not place_name:
+                    if destination and destination not in vague_patterns and "附近" not in destination:
+                        item["placeName"] = destination
+                    else:
+                        # 根据placeType生成一个具体名称
+                        place_type = item.get("placeType", "walking")
+                        type_name_map = {
+                            "walking": "健身步道",
+                            "running": "跑步道",
+                            "cycling": "骑行道",
+                            "park": "中央公园",
+                            "gym": "健身房",
+                            "indoor": "室内运动场",
+                            "outdoor": "户外运动场"
+                        }
+                        item["placeName"] = type_name_map.get(place_type, "运动场所")
+        
+        return trip_data
+    
+    def _get_default_exercise_plan(self, intent: dict, calories_target: int = 200) -> dict:
+        """返回默认运动计划（当AI调用失败时）"""
+        destination = intent.get("destination", "附近")
+        start_date = intent.get("startDate")
+        end_date = intent.get("endDate")
+        from datetime import datetime
+        if not start_date:
+            start_date = datetime.now().date().strftime("%Y-%m-%d")
+        if not end_date:
+            end_date = start_date
+        
+        # 根据目标卡路里生成运动计划
+        # 散步：约5 kcal/分钟，慢跑：约10 kcal/分钟
+        items = []
+        remaining_calories = calories_target
+        
+        if remaining_calories >= 150:
+            # 慢跑20分钟，消耗约200卡路里
+            items.append({
+                "dayIndex": 1,
+                "startTime": "19:30",
+                "placeName": "健身步道",
+                "placeType": "running",
+                "duration": 20,
+                "cost": min(remaining_calories, 200),
+                "notes": "餐后慢跑，注意控制强度"
+            })
+            remaining_calories -= 200
+        
+        if remaining_calories > 0:
+            # 散步补充剩余卡路里
+            walk_duration = max(10, int(remaining_calories / 5))
+            items.append({
+                "dayIndex": 1,
+                "startTime": "20:00",
+                "placeName": "社区公园",
+                "placeType": "walking",
+                "duration": walk_duration,
+                "cost": remaining_calories,
+                "notes": "餐后散步"
+            })
         
         return {
-            "title": f"{destination}{days}日游",
+            "title": f"餐后运动计划（消耗{calories_target}卡路里）",
             "destination": destination,
             "startDate": start_date,
             "endDate": end_date,
-            "travelers": travelers,
-            "items": [
+            "travelers": ["本人"],
+            "items": items if items else [
                 {
                     "dayIndex": 1,
-                    "startTime": "09:00",
-                    "placeName": f"{destination}主要景点",
-                    "placeType": "attraction",
-                    "duration": 180,
-                    "notes": "建议游玩"
+                    "startTime": "19:00",
+                    "placeName": "附近公园",
+                    "placeType": "walking",
+                    "duration": 30,
+                    "cost": calories_target,
+                    "notes": "餐后散步"
                 }
             ]
         }

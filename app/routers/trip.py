@@ -19,7 +19,7 @@ from app.db_models.trip_plan import TripPlan
 from app.db_models.trip_item import TripItem
 from app.services.ai_service import AIService
 
-router = APIRouter(prefix="/api/trip", tags=["行程规划"])
+router = APIRouter(prefix="/api/trip", tags=["运动规划"])
 
 # 初始化AI服务
 ai_service = AIService()
@@ -31,11 +31,13 @@ async def generate_trip(
     db: Session = Depends(get_db)
 ):
     """
-    生成行程计划
+    生成运动计划（餐后运动规划）
     
     - **userId**: 用户ID
-    - **query**: 用户查询文本
+    - **query**: 用户查询文本（如"规划餐后运动，消耗300卡路里"）
     - **preferences**: 用户偏好（健康目标、过敏原等）
+    - **latitude**: 用户当前位置纬度（可选）
+    - **longitude**: 用户当前位置经度（可选）
     """
     try:
         # 准备偏好数据
@@ -46,10 +48,30 @@ async def generate_trip(
                 "allergens": request.preferences.allergens or []
             }
         
-        # 调用AI服务生成行程
+        # 获取用户今日饮食记录（计算已摄入卡路里）
+        from app.db_models.diet_record import DietRecord
+        from datetime import date
+        today = date.today()
+        today_records = db.query(DietRecord).filter(
+            DietRecord.user_id == request.userId,
+            DietRecord.record_date == today
+        ).all()
+        total_calories_intake = sum(record.calories for record in today_records)
+        
+        # 准备位置信息
+        user_location = None
+        if request.latitude is not None and request.longitude is not None:
+            user_location = {
+                "latitude": request.latitude,
+                "longitude": request.longitude
+            }
+        
+        # 调用AI服务生成运动计划
         trip_data = ai_service.generate_trip(
             query=request.query,
-            preferences=preferences_dict
+            preferences=preferences_dict,
+            calories_intake=total_calories_intake,
+            user_location=user_location
         )
         
         # 解析日期
@@ -61,6 +83,8 @@ async def generate_trip(
             user_id=request.userId,
             title=trip_data.get("title", "行程计划"),
             destination=trip_data.get("destination"),
+            latitude=user_location.get("latitude") if user_location else None,
+            longitude=user_location.get("longitude") if user_location else None,
             start_date=start_date,
             end_date=end_date,
             travelers=trip_data.get("travelers", ["本人"]),
@@ -70,7 +94,7 @@ async def generate_trip(
         db.add(trip_plan)
         db.flush()  # 获取trip_plan.id
         
-        # 创建行程节点
+        # 创建运动节点
         items = trip_data.get("items", [])
         for index, item_data in enumerate(items):
             # 解析时间
@@ -82,6 +106,9 @@ async def generate_trip(
                 except:
                     pass
             
+            # cost字段存储卡路里消耗（语义转换）
+            calories_burned = item_data.get("cost")  # AI返回的cost字段实际是卡路里
+            
             trip_item = TripItem(
                 trip_id=trip_plan.id,
                 day_index=item_data.get("dayIndex", 1),
@@ -89,7 +116,7 @@ async def generate_trip(
                 place_name=item_data.get("placeName", ""),
                 place_type=item_data.get("placeType"),
                 duration=item_data.get("duration"),
-                cost=item_data.get("cost"),
+                cost=calories_burned,  # 存储卡路里消耗
                 notes=item_data.get("notes"),
                 sort_order=index
             )
@@ -129,7 +156,7 @@ async def generate_trip(
         
         return GenerateTripResponse(
             code=200,
-            message="行程生成成功",
+            message="运动计划生成成功",
             data=trip_response
         )
         
@@ -138,8 +165,8 @@ async def generate_trip(
         raise HTTPException(status_code=400, detail=f"请求参数错误: {str(e)}")
     except Exception as e:
         db.rollback()
-        print(f"生成行程失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"生成行程失败: {str(e)}")
+        print(f"生成运动计划失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"生成运动计划失败: {str(e)}")
 
 
 def _trip_plan_to_summary(trip_plan: TripPlan, item_count: int = 0) -> TripSummary:

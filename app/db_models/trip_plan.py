@@ -1,7 +1,7 @@
 """
 行程计划表模型
 """
-from sqlalchemy import Column, Integer, String, Date, TIMESTAMP, JSON
+from sqlalchemy import Column, Integer, String, Date, TIMESTAMP, JSON, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -13,8 +13,10 @@ class TripPlan(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True, comment="行程ID")
     user_id = Column(Integer, nullable=False, comment="用户ID")
-    title = Column(String(100), nullable=False, comment="行程标题")
-    destination = Column(String(50), comment="目的地")
+    title = Column(String(100), nullable=False, comment="运动计划标题（原为行程标题）")
+    destination = Column(String(50), comment="运动区域/起点（原为目的地）")
+    latitude = Column(Float, comment="用户生成计划时的位置纬度（可选）")
+    longitude = Column(Float, comment="用户生成计划时的位置经度（可选）")
     start_date = Column(Date, nullable=False, comment="开始日期")
     end_date = Column(Date, nullable=False, comment="结束日期")
     travelers = Column(JSON, comment="同行人员，JSON格式: [\"本人\", \"父母\"]")

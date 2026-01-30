@@ -12,6 +12,7 @@ class User(Base):
     
     id = Column(Integer, primary_key=True, autoincrement=True, comment="用户ID")
     nickname = Column(String(50), default="健康达人", comment="用户昵称")
+    password = Column(String(128), nullable=False, comment="用户密码")
     health_goal = Column(
         String(20),
         default="balanced",

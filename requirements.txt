@@ -10,4 +10,5 @@ requests==2.31.0
 sqlalchemy==2.0.25
 pymysql==1.1.0
 cryptography==42.0.0
+geopy==2.4.1
 

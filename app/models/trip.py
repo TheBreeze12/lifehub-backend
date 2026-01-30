@@ -13,10 +13,12 @@ class TripPreferences(BaseModel):
 
 
 class GenerateTripRequest(BaseModel):
-    """生成行程请求"""
+    """生成行程请求（现用于运动计划）"""
     userId: int = Field(..., description="用户ID", gt=0)
     query: str = Field(..., description="用户查询文本", min_length=1, max_length=500)
     preferences: Optional[TripPreferences] = Field(None, description="用户偏好")
+    latitude: Optional[float] = Field(None, description="用户当前位置纬度", ge=-90, le=90)
+    longitude: Optional[float] = Field(None, description="用户当前位置经度", ge=-180, le=180)
     
     class Config:
         json_schema_extra = {
@@ -36,9 +38,9 @@ class TripItemData(BaseModel):
     dayIndex: int = Field(..., description="第几天（从1开始）")
     startTime: Optional[str] = Field(None, description="开始时间（HH:mm格式）")
     placeName: str = Field(..., description="地点名称")
-    placeType: Optional[str] = Field(None, description="类型: attraction/dining/transport/accommodation")
+    placeType: Optional[str] = Field(None, description="类型: walking/running/cycling/park/gym/indoor/outdoor (运动类型) 或 attraction/dining/transport/accommodation (兼容旧数据)")
     duration: Optional[int] = Field(None, description="预计时长（分钟）")
-    cost: Optional[float] = Field(None, description="预计费用（元）")
+    cost: Optional[float] = Field(None, description="预计消耗卡路里（kcal），原为费用字段，现语义转换为卡路里")
     notes: Optional[str] = Field(None, description="备注")
     
     class Config:
@@ -55,10 +57,10 @@ class TripItemData(BaseModel):
 
 
 class TripData(BaseModel):
-    """行程数据"""
+    """行程数据（现用于运动计划）"""
     tripId: int = Field(..., description="行程ID")
-    title: str = Field(..., description="行程标题")
-    destination: Optional[str] = Field(None, description="目的地")
+    title: str = Field(..., description="运动计划标题（原为行程标题）")
+    destination: Optional[str] = Field(None, description="运动区域/起点（原为目的地）")
     startDate: str = Field(..., description="开始日期（YYYY-MM-DD）")
     endDate: str = Field(..., description="结束日期（YYYY-MM-DD）")
     items: List[TripItemData] = Field(default_factory=list, description="行程节点列表")
@@ -109,10 +111,10 @@ class GenerateTripResponse(BaseModel):
 
 
 class TripSummary(BaseModel):
-    """行程摘要（用于列表展示）"""
+    """行程摘要（用于列表展示，现用于运动计划）"""
     tripId: int = Field(..., description="行程ID")
-    title: str = Field(..., description="行程标题")
-    destination: Optional[str] = Field(None, description="目的地")
+    title: str = Field(..., description="运动计划标题（原为行程标题）")
+    destination: Optional[str] = Field(None, description="运动区域/起点（原为目的地）")
     startDate: str = Field(..., description="开始日期（YYYY-MM-DD）")
     endDate: str = Field(..., description="结束日期（YYYY-MM-DD）")
     status: Optional[str] = Field(None, description="状态: planning/ongoing/done")

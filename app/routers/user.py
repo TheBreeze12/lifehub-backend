@@ -60,6 +60,59 @@ async def get_user_preferences(
         )
 
 
+@router.get("/data", response_model=UserPreferencesResponse)
+async def get_user_preferences(
+    userId: int,
+    password: str,
+    db: Session = Depends(get_db)
+):
+    """
+    获取用户偏好
+    
+    - **userId**: 用户ID
+    - **password**: 用户密码
+    """
+    try:
+        # 查询用户
+        user = db.query(User).filter(User.id == userId).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"用户不存在，userId: {userId}"
+            )
+        
+        if user.password != password:
+            raise HTTPException(
+                status_code=401,
+                detail="密码错误"
+            )
+        
+        # 构建响应数据
+        preferences_data = UserPreferencesData(
+            userId=user.id,
+            nickname=user.nickname,
+            healthGoal=user.health_goal,
+            allergens=user.allergens if user.allergens else [],
+            travelPreference=user.travel_preference,
+            dailyBudget=user.daily_budget
+        )
+        
+        return UserPreferencesResponse(
+            code=200,
+            message="获取成功",
+            data=preferences_data
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取用户偏好失败: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"获取用户偏好失败: {str(e)}"
+        )
+
 @router.put("/preferences", response_model=UserPreferencesResponse)
 async def update_user_preferences(
     request: UserPreferencesRequest,

@@ -49,6 +49,8 @@ CREATE TABLE `trip_plan` (
   `user_id` int NOT NULL,
   `title` varchar(100) NOT NULL,
   `destination` varchar(50) DEFAULT NULL,
+  `latitude` float DEFAULT NULL COMMENT '用户生成计划时的位置纬度（可选）',
+  `longitude` float DEFAULT NULL COMMENT '用户生成计划时的位置经度（可选）',
   `start_date` date NOT NULL,
   `end_date` date NOT NULL,
   `status` varchar(20) DEFAULT 'planning',
