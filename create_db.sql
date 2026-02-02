@@ -14,7 +14,7 @@ CREATE TABLE `diet_record` (
   PRIMARY KEY (`id`),
   KEY `idx_user_date` (`user_id`,`record_date`),
   CONSTRAINT `diet_record_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `menu_recognition` (
   `id` int NOT NULL AUTO_INCREMENT COMMENT '记录ID',
@@ -32,9 +32,9 @@ CREATE TABLE `trip_item` (
   `day_index` int NOT NULL,
   `start_time` time DEFAULT NULL,
   `place_name` varchar(100) NOT NULL,
-  `place_type` varchar(20) DEFAULT NULL,
+  `place_type` varchar(20) DEFAULT NULL COMMENT '类型: walking/running/cycling/park/gym/indoor/outdoor (运动类型) 或 attraction/dining/transport/accommodation (兼容旧数据)',
   `duration` int DEFAULT NULL,
-  `cost` decimal(8,2) DEFAULT NULL,
+  `cost` decimal(8,2) DEFAULT NULL COMMENT '预计消耗卡路里（kcal），原为费用字段，现语义转换为卡路里',
   `notes` text,
   `sort_order` int DEFAULT '0',
   `latitude` float DEFAULT NULL COMMENT '纬度',
@@ -42,7 +42,7 @@ CREATE TABLE `trip_item` (
   PRIMARY KEY (`id`),
   KEY `idx_trip` (`trip_id`),
   CONSTRAINT `trip_item_ibfk_1` FOREIGN KEY (`trip_id`) REFERENCES `trip_plan` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=153 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=252 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `trip_plan` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -61,16 +61,18 @@ CREATE TABLE `trip_plan` (
   PRIMARY KEY (`id`),
   KEY `idx_user` (`user_id`),
   CONSTRAINT `trip_plan_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=65 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `user` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `nickname` varchar(50) DEFAULT '健康达人',
+  `nickname` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
   `health_goal` varchar(20) DEFAULT 'balanced',
   `allergens` json DEFAULT NULL,
   `travel_preference` varchar(20) DEFAULT 'self_driving',
   `daily_budget` int DEFAULT '500',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  `password` varchar(100) NOT NULL DEFAULT '123456',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `user_unique` (`nickname`)
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

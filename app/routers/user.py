@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app.models.user import (
     UserPreferencesRequest, 
     UserPreferencesResponse, 
-    UserPreferencesData
+    UserPreferencesData,
+    UserRegistrationRequest,
+    UserRegistrationResponse
 )
 from app.database import get_db
 from app.db_models.user import User
@@ -62,24 +64,24 @@ async def get_user_preferences(
 
 @router.get("/data", response_model=UserPreferencesResponse)
 async def get_user_preferences(
-    userId: int,
+    nickname: str,
     password: str,
     db: Session = Depends(get_db)
 ):
     """
     获取用户偏好
     
-    - **userId**: 用户ID
+    - **nickname**: 用户昵称
     - **password**: 用户密码
     """
     try:
         # 查询用户
-        user = db.query(User).filter(User.id == userId).first()
+        user = db.query(User).filter(User.nickname == nickname).first()
         
         if not user:
             raise HTTPException(
                 status_code=404, 
-                detail=f"用户不存在，userId: {userId}"
+                detail=f"用户不存在，nickname: {nickname}"
             )
         
         if user.password != password:
@@ -177,3 +179,38 @@ async def update_user_preferences(
             detail=f"更新用户偏好失败: {str(e)}"
         )
 
+@router.post("/register", response_model=UserRegistrationResponse)
+async def register_user(
+    request: UserRegistrationRequest,
+    db: Session = Depends(get_db)
+) -> UserRegistrationResponse:
+    """
+    注册新用户
+    """
+    new_user = User(
+        nickname=request.nickname,
+        password=request.password
+    )
+    # 如果用户名重复或者其他错误，会在这里抛出异常
+    try:
+        user = db.query(User).filter(User.nickname == request.nickname).first()
+        if user:
+            raise HTTPException(
+                status_code=400,
+                detail=f"用户已存在，nickname: {request.nickname}"
+            )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        return UserRegistrationResponse(
+            code=200,
+        message="注册成功",
+        userId=new_user.id
+        )
+    except Exception as e:
+        db.rollback()
+        print(f"用户注册失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"用户注册失败: {str(e)}"
+        )

@@ -4,9 +4,10 @@
 
 ## ✨ 核心功能
 
-- 🍽️ **餐饮服务**：菜品营养分析、菜单图片识别、饮食记录管理
-- 🗺️ **行程规划**：AI生成个性化行程计划、行程管理
-- 👤 **用户中心**：用户偏好设置、健康目标管理
+- **餐饮服务**：菜品营养分析、菜单图片识别、饮食记录管理
+- **运动计划**：AI生成餐后运动计划（散步/慢跑/骑行/室内训练等）、计划管理
+- **天气服务**：根据地址或行程计划查询当前天气（Open-Meteo，无需API Key）
+- **用户中心**：用户注册、登录、偏好设置、健康目标管理
 
 ## 项目结构
 
@@ -35,7 +36,8 @@ backend/
 │   │   ├── __init__.py
 │   │   ├── food.py          # 餐饮API路由
 │   │   ├── trip.py          # 行程API路由
-│   │   └── user.py          # 用户API路由
+│   │   ├── user.py          # 用户API路由
+│   │   └── weather.py       # 天气API路由
 │   │
 │   └── services/            # 业务服务
 │       ├── __init__.py
@@ -152,7 +154,7 @@ python utils/init_database.py
 
 ```bash
 # 方法1：使用uvicorn命令
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # 方法2：直接运行main.py
 python -m app.main
@@ -165,6 +167,24 @@ start.bat
 - **API文档**：http://localhost:8000/docs
 - **交互式文档**：http://localhost:8000/redoc
 - **健康检查**：http://localhost:8000/health
+
+提示：开发环境可用 `--reload` 热重载，但在打包或某些环境下可能导致反复重启或导入路径问题，遇到异常请去掉 `--reload`。
+
+### 生成运动计划示例
+
+```bash
+curl -X POST http://localhost:8000/api/trip/generate \
+   -H "Content-Type: application/json" \
+   -d '{
+      "userId": 123,
+      "query": "今天午餐后在北京安排散步，目标消耗200千卡，地点选具体公园",
+      "preferences": {"healthGoal": "reduce_fat"}
+   }'
+```
+
+返回的 `items[].placeType` 为 `walking/running/cycling/park/gym/indoor/outdoor`；
+`items[].cost` 表示预计消耗卡路里（kcal），非费用；
+`items[].startTime` 会依据提示词或当前时间，遵循“餐后30–60分钟”动态生成。
 
 ## Android连接说明
 
@@ -195,6 +215,33 @@ const val BASE_URL = "http://10.0.2.2:8000"  // 模拟器专用
    const val BASE_URL = "http://192.168.1.100:8000"  // 替换为实际IP
    ```
 
+### 天气API使用示例
+
+后端已提供天气查询接口（使用Open-Meteo，无需API Key）：
+- 根据地址查询：`GET /api/weather/by-address?address=北京市朝阳区望京`
+- 根据计划ID查询：`GET /api/weather/by-plan?planId=456`
+
+示例（curl）：
+```bash
+# 地址查询
+curl "http://localhost:8000/api/weather/by-address?address=上海市浦东新区世纪公园"
+
+# 计划查询
+curl "http://localhost:8000/api/weather/by-plan?planId=456"
+```
+
+### 用户注册和登录示例
+
+```bash
+# 用户注册
+curl -X POST http://localhost:8000/api/user/register \
+  -H "Content-Type: application/json" \
+  -d '{"nickname": "健康达人", "password": "password123"}'
+
+# 用户登录
+curl "http://localhost:8000/api/user/data?nickname=健康达人&password=password123"
+```
+
 ## 常见问题
 
 ### 1. API Key错误
@@ -221,6 +268,22 @@ uvicorn app.main:app --reload --port 8001
 前端出现跨域错误，检查 `main.py` 中的CORS配置是否正确。
 
 ### 4. AI响应慢
+### 5. 地理编码失败
+
+**错误：** `无法解析地址为坐标，请提供更精确的地址`
+
+**解决：**
+- 提供更具体的地址（包含城市与区/县）
+- 避免过于模糊的词语（如“附近”）
+- 网络环境良好的情况下重试
+
+### 6. 计划天气查询失败
+
+**错误：** `该计划无坐标且目的地为空，无法查询天气`
+
+**解决：**
+- 在创建计划时填写 `destination`
+- 或在计划中补充 `latitude/longitude`
 
 通义千问API首次调用可能较慢，后续会快一些。可以：
 - 添加缓存机制
@@ -230,8 +293,13 @@ uvicorn app.main:app --reload --port 8001
 
 - **FastAPI**: Web框架
 - **Pydantic**: 数据验证
-- **DashScope**: 通义千问SDK
+- **SQLAlchemy**: ORM框架，数据库操作
+- **DashScope**: 通义千问SDK（AI服务）
 - **Uvicorn**: ASGI服务器
+- **geopy**: 地理编码（Nominatim）
+- **Open-Meteo**: 天气服务（无需API Key）
+- **python-dotenv**: 环境变量管理
+- **MySQL**: 数据库
 
 ## 许可
 

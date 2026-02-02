@@ -8,6 +8,33 @@
 
 ## 接口列表
 
+### 接口总览
+
+| 分类     | 接口                           | 方法 | 说明               |
+| -------- | ------------------------------ | ---- | ------------------ |
+| **基础** | `/`                            | GET  | API基本信息        |
+| **基础** | `/health`                      | GET  | 健康检查           |
+| **餐饮** | `/api/food/analyze`            | POST | 分析菜品营养成分   |
+| **餐饮** | `/api/food/recognize`          | POST | 菜单图片识别       |
+| **餐饮** | `/api/food/latest-recognition` | GET  | 获取最新识别结果   |
+| **餐饮** | `/api/food/record`             | POST | 添加饮食记录       |
+| **餐饮** | `/api/food/records`            | GET  | 获取所有饮食记录   |
+| **餐饮** | `/api/food/records/today`      | GET  | 获取今日饮食记录   |
+| **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
+| **用户** | `/api/user/register`           | POST | 用户注册           |
+| **用户** | `/api/user/data`               | GET  | 用户登录           |
+| **用户** | `/api/user/preferences`        | GET  | 获取用户偏好       |
+| **用户** | `/api/user/preferences`        | PUT  | 更新用户偏好       |
+| **运动** | `/api/trip/generate`           | POST | 生成运动计划       |
+| **运动** | `/api/trip/list`               | GET  | 获取运动计划列表   |
+| **运动** | `/api/trip/recent`             | GET  | 获取最近运动计划   |
+| **运动** | `/api/trip/home`               | GET  | 获取首页运动计划   |
+| **运动** | `/api/trip/{tripId}`           | GET  | 获取运动计划详情   |
+| **天气** | `/api/weather/by-address`      | GET  | 根据地址查询天气   |
+| **天气** | `/api/weather/by-plan`         | GET  | 根据计划ID查询天气 |
+
+---
+
 ### 1. 根路径
 
 **接口地址**: `GET /`
@@ -600,11 +627,11 @@ Content-Type: application/json
 
 ---
 
-### 12. 生成行程计划 ⭐
+### 11.1 用户注册 ⭐
 
-**接口地址**: `POST /api/trip/generate`
+**接口地址**: `POST /api/user/register`
 
-**接口描述**: 根据用户查询和偏好，AI生成个性化行程计划
+**接口描述**: 注册新用户
 
 **请求头**:
 ```
@@ -612,13 +639,123 @@ Content-Type: application/json
 ```
 
 **请求参数**:
-| 参数名                 | 类型         | 必填 | 说明                                                    |
-| ---------------------- | ------------ | ---- | ------------------------------------------------------- |
-| userId                 | int          | 是   | 用户ID，>0                                              |
-| query                  | string       | 是   | 用户查询文本，1-500个字符，如："规划周末带娃去杭州玩"   |
-| preferences            | object\|null | 否   | 用户偏好对象                                            |
-| preferences.healthGoal | string\|null | 否   | 健康目标：reduce_fat/gain_muscle/control_sugar/balanced |
-| preferences.allergens  | array\|null  | 否   | 过敏原列表，如：["海鲜", "花生"]                        |
+| 参数名   | 类型   | 必填 | 说明                   |
+| -------- | ------ | ---- | ---------------------- |
+| nickname | string | 是   | 用户昵称，最大50个字符 |
+| password | string | 是   | 用户密码，6-128个字符  |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/user/register
+Content-Type: application/json
+
+{
+  "nickname": "健康达人",
+  "password": "securepassword123"
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "注册成功",
+  "userId": 123
+}
+```
+
+**错误响应**:
+- 用户已存在（HTTP 400）:
+```json
+{
+  "detail": "用户已存在，nickname: 健康达人"
+}
+```
+
+- 密码长度不符合要求（HTTP 422）:
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "password"],
+      "msg": "ensure this value has at least 6 characters",
+      "type": "value_error.any_str.min_length"
+    }
+  ]
+}
+```
+
+---
+
+### 11.2 用户登录
+
+**接口地址**: `GET /api/user/data`
+
+**接口描述**: 通过昵称和密码登录，获取用户信息
+
+**请求参数**:
+| 参数名   | 类型   | 必填 | 说明     |
+| -------- | ------ | ---- | -------- |
+| nickname | string | 是   | 用户昵称 |
+| password | string | 是   | 用户密码 |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/user/data?nickname=健康达人&password=securepassword123
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "userId": 123,
+    "nickname": "健康达人",
+    "healthGoal": "reduce_fat",
+    "allergens": ["海鲜", "花生"],
+    "travelPreference": "self_driving",
+    "dailyBudget": 500
+  }
+}
+```
+
+**错误响应**:
+- 用户不存在（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，nickname: 健康达人"
+}
+```
+
+- 密码错误（HTTP 401）:
+```json
+{
+  "detail": "密码错误"
+}
+```
+
+---
+
+### 12. 生成运动计划 ⭐
+
+**接口地址**: `POST /api/trip/generate`
+
+**接口描述**: 根据用户查询与偏好，AI生成餐后运动计划（基于“餐后30–60分钟”原则，地点为具体可运动的场所）。
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名                 | 类型         | 必填 | 说明                                                                   |
+| ---------------------- | ------------ | ---- | ---------------------------------------------------------------------- |
+| userId                 | int          | 是   | 用户ID，>0                                                             |
+| query                  | string       | 是   | 用户查询文本，1-500个字符，如："今天午餐后在北京安排散步，消耗200千卡" |
+| preferences            | object\|null | 否   | 用户偏好对象                                                           |
+| preferences.healthGoal | string\|null | 否   | 健康目标：reduce_fat/gain_muscle/control_sugar/balanced                |
+| preferences.allergens  | array\|null  | 否   | 过敏原列表，如：["海鲜", "花生"]                                       |
 
 **请求示例**:
 ```bash
@@ -627,7 +764,7 @@ Content-Type: application/json
 
 {
   "userId": 123,
-  "query": "规划周末带娃去杭州玩",
+  "query": "今天午餐后在北京安排散步，目标消耗200千卡，地点选具体公园",
   "preferences": {
     "healthGoal": "reduce_fat",
     "allergens": ["海鲜", "花生"]
@@ -639,65 +776,56 @@ Content-Type: application/json
 ```json
 {
   "code": 200,
-  "message": "行程生成成功",
+  "message": "运动计划生成成功",
   "data": {
     "tripId": 456,
-    "title": "杭州2日亲子游",
-    "destination": "杭州",
-    "startDate": "2026-01-25",
-    "endDate": "2026-01-26",
+    "title": "餐后散步计划",
+    "destination": "北京中央公园",
+    "startDate": "2026-02-01",
+    "endDate": "2026-02-01",
     "items": [
       {
         "dayIndex": 1,
-        "startTime": "09:00",
-        "placeName": "西湖风景区",
-        "placeType": "attraction",
-        "duration": 180,
-        "cost": 0.0,
-        "notes": "建议游玩3小时，适合亲子活动"
+        "startTime": "12:45",
+        "placeName": "北京中央公园健身步道",
+        "placeType": "walking",
+        "duration": 30,
+        "cost": 150,
+        "notes": "餐后散步，建议慢走，注意补水"
       },
       {
         "dayIndex": 1,
-        "startTime": "12:00",
-        "placeName": "楼外楼",
-        "placeType": "dining",
-        "duration": 60,
-        "cost": 200.0,
-        "notes": "注意避开海鲜类菜品"
+        "startTime": "19:30",
+        "placeName": "北京滨江健身步道",
+        "placeType": "running",
+        "duration": 20,
+        "cost": 160,
+        "notes": "轻慢跑，控制强度，避免过饱运动"
       },
-      {
-        "dayIndex": 2,
-        "startTime": "10:00",
-        "placeName": "灵隐寺",
-        "placeType": "attraction",
-        "duration": 120,
-        "cost": 45.0,
-        "notes": "适合文化体验"
-      }
     ]
   }
 }
 ```
 
 **响应字段说明**:
-| 字段                   | 类型         | 说明                                            |
-| ---------------------- | ------------ | ----------------------------------------------- |
-| code                   | int          | 状态码，200表示成功                             |
-| message                | string       | 响应消息                                        |
-| data                   | object       | 行程数据                                        |
-| data.tripId            | int          | 行程ID                                          |
-| data.title             | string       | 行程标题                                        |
-| data.destination       | string\|null | 目的地                                          |
-| data.startDate         | string       | 开始日期（YYYY-MM-DD）                          |
-| data.endDate           | string       | 结束日期（YYYY-MM-DD）                          |
-| data.items             | array        | 行程节点列表                                    |
-| data.items[].dayIndex  | int          | 第几天（从1开始）                               |
-| data.items[].startTime | string\|null | 开始时间（HH:mm格式）                           |
-| data.items[].placeName | string       | 地点名称                                        |
-| data.items[].placeType | string\|null | 类型：attraction/dining/transport/accommodation |
-| data.items[].duration  | int\|null    | 预计时长（分钟）                                |
-| data.items[].cost      | float\|null  | 预计费用（元）                                  |
-| data.items[].notes     | string\|null | 备注                                            |
+| 字段                   | 类型         | 说明                                                               |
+| ---------------------- | ------------ | ------------------------------------------------------------------ |
+| code                   | int          | 状态码，200表示成功                                                |
+| message                | string       | 响应消息                                                           |
+| data                   | object       | 运动计划数据                                                       |
+| data.tripId            | int          | 计划ID                                                             |
+| data.title             | string       | 计划标题                                                           |
+| data.destination       | string\|null | 运动区域/起点（具体地点）                                          |
+| data.startDate         | string       | 开始日期（YYYY-MM-DD）                                             |
+| data.endDate           | string       | 结束日期（YYYY-MM-DD）                                             |
+| data.items             | array        | 行程节点列表                                                       |
+| data.items[].dayIndex  | int          | 第几天（从1开始）                                                  |
+| data.items[].startTime | string\|null | 开始时间（HH:mm，依据提示词或当前时间，遵循餐后30–60分钟动态生成） |
+| data.items[].placeName | string       | 运动地点名称（必须为具体地点）                                     |
+| data.items[].placeType | string\|null | 运动类型/场景：walking/running/cycling/park/gym/indoor/outdoor     |
+| data.items[].duration  | int\|null    | 预计时长（分钟）                                                   |
+| data.items[].cost      | int\|null    | 预计消耗卡路里（kcal）                                             |
+| data.items[].notes     | string\|null | 运动建议、注意事项                                                 |
 
 **错误响应**:
 - 请求参数错误（HTTP 400）:
@@ -709,11 +837,133 @@ Content-Type: application/json
 
 ---
 
-### 13. 获取行程列表
+### 13. 天气：根据地址获取当前天气 ⭐
+
+**接口地址**: `GET /api/weather/by-address`
+
+**接口描述**: 通过地址文本进行地理编码，查询当前天气（Open-Meteo，无需API Key）
+
+**请求参数**:
+| 参数名  | 类型   | 必填 | 说明                             |
+| ------- | ------ | ---- | -------------------------------- |
+| address | string | 是   | 地址文本，例如"北京市朝阳区望京" |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/weather/by-address?address=北京市朝阳区望京
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "address": "北京市朝阳区望京",
+    "latitude": 39.99,
+    "longitude": 116.47,
+    "temperature": 2.1,
+    "windspeed": 5.0,
+    "winddirection": 320,
+    "weathercode": 3,
+    "time": "2026-02-01T10:00",
+    "hourly": {
+      "time": ["2026-02-01T10:00", "2026-02-01T11:00"],
+      "temperature_2m": [2.1, 2.3],
+      "precipitation": [0.0, 0.0]
+    }
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                       | 类型   | 说明                       |
+| -------------------------- | ------ | -------------------------- |
+| code                       | int    | 状态码，200表示成功        |
+| message                    | string | 响应消息                   |
+| data                       | object | 天气数据对象               |
+| data.address               | string | 地址提示（原始查询地址）   |
+| data.latitude              | float  | 纬度                       |
+| data.longitude             | float  | 经度                       |
+| data.temperature           | float  | 当前气温（℃）              |
+| data.windspeed             | float  | 风速（m/s）                |
+| data.winddirection         | int    | 风向（度）                 |
+| data.weathercode           | int    | 天气代码（Open-Meteo约定） |
+| data.time                  | string | 时间（ISO）                |
+| data.hourly                | object | 小时级预报（截取若干条）   |
+| data.hourly.time           | array  | 时间列表                   |
+| data.hourly.temperature_2m | array  | 小时级温度（℃）            |
+| data.hourly.precipitation  | array  | 小时级降水量（mm）         |
+
+**错误响应**:
+- 地址为空（HTTP 400）:
+```json
+{ "detail": "地址不能为空" }
+```
+- 地址解析失败（HTTP 400）:
+```json
+{ "detail": "无法解析地址为坐标，请提供更精确的地址" }
+```
+
+---
+
+### 14. 天气：根据计划ID获取当前天气 ⭐
+
+**接口地址**: `GET /api/weather/by-plan`
+
+**接口描述**: 通过行程计划 `planId` 查询当前天气
+- 若计划包含 `latitude/longitude`，按坐标查询
+- 否则按计划的 `destination` 地址查询
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明       |
+| ------ | ---- | ---- | ---------- |
+| planId | int  | 是   | 行程计划ID |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/weather/by-plan?planId=456
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "address": "杭州西湖风景区",
+    "latitude": 30.25,
+    "longitude": 120.16,
+    "temperature": 7.3,
+    "windspeed": 3.6,
+    "winddirection": 270,
+    "weathercode": 1,
+    "time": "2026-02-01T10:00",
+    "hourly": {
+      "time": ["2026-02-01T10:00", "2026-02-01T11:00"],
+      "temperature_2m": [7.3, 7.6],
+      "precipitation": [0.0, 0.0]
+    }
+  }
+}
+```
+
+**错误响应**:
+- 行程不存在（HTTP 404）:
+```json
+{ "detail": "行程不存在，planId: 456" }
+```
+- 目的地为空且无坐标（HTTP 400）:
+```json
+{ "detail": "该计划无坐标且目的地为空，无法查询天气" }
+```
+
+
+### 15. 获取运动计划列表
 
 **接口地址**: `GET /api/trip/list`
 
-**接口描述**: 获取用户全部行程规划列表，按创建时间倒序
+**接口描述**: 获取用户全部运动计划列表，按创建时间倒序
 
 **请求参数**:
 | 参数名 | 类型 | 必填 | 说明   |
@@ -742,18 +992,18 @@ GET http://localhost:8000/api/trip/list?userId=123
     },
     {
       "tripId": 455,
-      "title": "北京3日游",
-      "destination": "北京",
-      "startDate": "2026-01-20",
-      "endDate": "2026-01-22",
+      "title": "周末餐后慢跑计划",
+      "destination": "上海滨江健身步道",
+      "startDate": "2026-02-01",
+      "endDate": "2026-02-02",
       "status": "done",
       "itemCount": 8
     }
   ]
-}
-```
-
-**响应字段说明**:
+      "title": "三日餐后散步计划",
+      "destination": "北京中央公园",
+      "startDate": "2026-01-29",
+      "endDate": "2026-01-31",
 | 字段               | 类型         | 说明                        |
 | ------------------ | ------------ | --------------------------- |
 | code               | int          | 状态码，200表示成功         |
@@ -769,11 +1019,11 @@ GET http://localhost:8000/api/trip/list?userId=123
 
 ---
 
-### 14. 获取最近行程
+### 16. 获取最近运动计划
 
 **接口地址**: `GET /api/trip/recent`
 
-**接口描述**: 获取用户最近行程规划（用于快速访问）
+**接口描述**: 获取用户最近运动计划（用于快速访问）
 
 **请求参数**:
 | 参数名 | 类型 | 必填 | 说明                  |
@@ -794,10 +1044,10 @@ GET http://localhost:8000/api/trip/recent?userId=123&limit=5
   "data": [
     {
       "tripId": 456,
-      "title": "杭州2日亲子游",
-      "destination": "杭州",
-      "startDate": "2026-01-25",
-      "endDate": "2026-01-26",
+      "title": "餐后散步三日计划",
+      "destination": "深圳中心公园",
+      "startDate": "2026-01-30",
+      "endDate": "2026-02-01",
       "status": "planning",
       "itemCount": 5
     }
@@ -807,11 +1057,11 @@ GET http://localhost:8000/api/trip/recent?userId=123&limit=5
 
 ---
 
-### 15. 获取首页行程
+### 16. 获取首页运动计划
 
 **接口地址**: `GET /api/trip/home`
 
-**接口描述**: 获取首页展示的行程（最近的几个行程）
+**接口描述**: 获取首页展示的运动计划（最近的几个计划）
 
 **请求参数**:
 | 参数名 | 类型 | 必填 | 说明                  |
@@ -832,10 +1082,10 @@ GET http://localhost:8000/api/trip/home?userId=123&limit=3
   "data": [
     {
       "tripId": 456,
-      "title": "杭州2日亲子游",
-      "destination": "杭州",
-      "startDate": "2026-01-25",
-      "endDate": "2026-01-26",
+      "title": "餐后慢跑两日计划",
+      "destination": "成都城北健身步道",
+      "startDate": "2026-02-01",
+      "endDate": "2026-02-02",
       "status": "planning",
       "itemCount": 5
     }
@@ -845,11 +1095,11 @@ GET http://localhost:8000/api/trip/home?userId=123&limit=3
 
 ---
 
-### 16. 获取行程详情
+### 17. 获取运动计划详情
 
 **接口地址**: `GET /api/trip/{tripId}`
 
-**接口描述**: 获取某个行程的具体信息，包括所有行程节点
+**接口描述**: 获取某个运动计划的具体信息，包括所有运动节点
 
 **路径参数**:
 | 参数名 | 类型 | 必填 | 说明   |
@@ -868,28 +1118,28 @@ GET http://localhost:8000/api/trip/456
   "message": "获取成功",
   "data": {
     "tripId": 456,
-    "title": "杭州2日亲子游",
-    "destination": "杭州",
-    "startDate": "2026-01-25",
-    "endDate": "2026-01-26",
+    "title": "两天餐后运动计划",
+    "destination": "重庆中央公园",
+    "startDate": "2026-02-01",
+    "endDate": "2026-02-02",
     "items": [
       {
         "dayIndex": 1,
-        "startTime": "09:00",
-        "placeName": "西湖风景区",
-        "placeType": "attraction",
-        "duration": 180,
-        "cost": 0.0,
-        "notes": "建议游玩3小时"
+        "startTime": "12:45",
+        "placeName": "重庆中央公园健身步道",
+        "placeType": "walking",
+        "duration": 40,
+        "cost": 180,
+        "notes": "餐后散步，慢走为主"
       },
       {
         "dayIndex": 1,
-        "startTime": "12:00",
-        "placeName": "楼外楼",
-        "placeType": "dining",
-        "duration": 60,
-        "cost": 200.0,
-        "notes": "注意避开海鲜类菜品"
+        "startTime": "19:30",
+        "placeName": "重庆滨江健身步道",
+        "placeType": "running",
+        "duration": 25,
+        "cost": 200,
+        "notes": "轻慢跑，注意补水"
       }
     ]
   }
@@ -906,103 +1156,6 @@ GET http://localhost:8000/api/trip/456
 
 ---
 
-## 使用示例
-
-### Python (requests)
-
-```python
-import requests
-
-# 分析菜品
-url = "http://localhost:8000/api/food/analyze"
-data = {"food_name": "番茄炒蛋"}
-
-response = requests.post(url, json=data)
-result = response.json()
-
-if result["success"]:
-    food_data = result["data"]
-    print(f"热量: {food_data['calories']} kcal")
-    print(f"推荐: {food_data['recommendation']}")
-```
-
-### JavaScript (fetch)
-
-```javascript
-// 分析菜品
-fetch('http://localhost:8000/api/food/analyze', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  body: JSON.stringify({
-    food_name: '番茄炒蛋'
-  })
-})
-.then(response => response.json())
-.then(data => {
-  if (data.success) {
-    console.log('热量:', data.data.calories);
-    console.log('推荐:', data.data.recommendation);
-  }
-});
-```
-
-### Kotlin (Retrofit)
-
-```kotlin
-// 定义API接口
-interface ApiService {
-    @POST("api/food/analyze")
-    suspend fun analyzeFood(
-        @Body request: FoodRequest
-    ): Response<FoodResponse>
-}
-
-// 数据类
-data class FoodRequest(
-    val food_name: String
-)
-
-data class FoodResponse(
-    val success: Boolean,
-    val message: String,
-    val data: FoodData?
-)
-
-data class FoodData(
-    val name: String,
-    val calories: Double,
-    val protein: Double,
-    val fat: Double,
-    val carbs: Double,
-    val recommendation: String
-)
-
-// 调用示例
-val request = FoodRequest(food_name = "番茄炒蛋")
-val response = apiService.analyzeFood(request)
-
-if (response.isSuccessful && response.body()?.success == true) {
-    val foodData = response.body()?.data
-    println("热量: ${foodData?.calories} kcal")
-    println("推荐: ${foodData?.recommendation}")
-}
-```
-
-### curl
-
-```bash
-# 分析菜品
-curl -X POST http://localhost:8000/api/food/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"food_name": "番茄炒蛋"}'
-
-# 健康检查
-curl http://localhost:8000/health
-```
-
----
 
 ## 错误码说明
 
@@ -1046,4 +1199,10 @@ curl http://localhost:8000/health
 - ✅ 集成通义千问AI
 - ✅ 添加健康检查接口
 - ✅ 配置CORS支持
+- ✅ 实现菜单图片识别功能
+- ✅ 实现饮食记录管理
+- ✅ 实现智能行程规划（运动计划）
+- ✅ 实现用户注册和登录
+- ✅ 实现用户偏好设置
+- ✅ 集成天气查询服务（Open-Meteo）
 

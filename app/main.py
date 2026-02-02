@@ -14,6 +14,7 @@ load_dotenv()
 from app.routers import food_router
 from app.routers import user as user_router
 from app.routers import trip as trip_router
+from app.routers import weather as weather_router
 
 # 导入数据库
 from app.database import check_db_connection, init_db
@@ -62,6 +63,7 @@ app.add_middleware(
 app.include_router(food_router)
 app.include_router(user_router.router)
 app.include_router(trip_router.router)
+app.include_router(weather_router.router)
 
 
 @app.get("/")
@@ -86,14 +88,25 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
+    import sys
     
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
+    # 在打包为可执行文件（PyInstaller）时禁用 reload，避免不停重载
+    is_frozen = getattr(sys, "frozen", False)
+    env_reload = os.getenv("RELOAD")  # 可通过设置 RELOAD=1 在开发模式下强制启用
+    reload_enabled = (not is_frozen) and (env_reload == "1" or env_reload is None)
+    if is_frozen:
+        print("⚙️ 检测到打包运行环境（frozen），禁用自动重载 reload")
+    elif env_reload == "0":
+        print("⚙️ RELOAD=0，禁用自动重载 reload")
+    elif env_reload == "1":
+        print("⚙️ RELOAD=1，启用自动重载 reload")
     
     uvicorn.run(
-        "app.main:app",
+        app=app,
         host=host,
         port=port,
-        reload=True
+        reload=reload_enabled
     )
 

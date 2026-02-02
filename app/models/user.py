@@ -82,3 +82,32 @@ class UserPreferencesResponse(BaseModel):
             }
         }
 
+
+class UserRegistrationRequest(BaseModel):
+    """用户注册请求"""
+    nickname: str = Field(..., description="用户昵称", max_length=50)
+    password: str = Field(..., description="用户密码", min_length=6, max_length=128)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "nickname": "健康达人",
+                "password": "securepassword123"
+            }
+        }
+        
+        
+class UserRegistrationResponse(BaseModel):
+    """用户注册API响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    userId: Optional[int] = Field(None, description="新注册用户的ID")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "注册成功",
+                "userId": 123
+            }
+        }

@@ -71,6 +71,65 @@ class AIService:
             except Exception as e:
                 print(f"警告: 地理编码服务初始化失败: {e}")
                 print("将使用经纬度坐标，不进行地理编码")
+
+    def geocode_address(self, address: str) -> Optional[Dict[str, float]]:
+        """将地址文本转为经纬度坐标"""
+        if not address:
+            return None
+        try:
+            if self.geocoder:
+                loc = self.geocoder.geocode(address, timeout=5, language='zh')
+                if loc:
+                    return {"latitude": loc.latitude, "longitude": loc.longitude}
+            # geopy不可用或失败时返回None
+            return None
+        except Exception as e:
+            print(f"地址地理编码失败: {str(e)}")
+            return None
+
+    def get_weather_by_address(self, address: str) -> dict:
+        """根据地址获取当前天气，使用 Open-Meteo（无需API Key）"""
+        if not address:
+            raise ValueError("地址不能为空")
+        coords = self.geocode_address(address)
+        if not coords:
+            raise ValueError("无法解析地址为坐标，请提供更精确的地址")
+        lat = coords["latitude"]
+        lon = coords["longitude"]
+        return self.get_weather_by_coords(lat, lon, address_hint=address)
+
+    def get_weather_by_coords(self, latitude: float, longitude: float, address_hint: str | None = None) -> dict:
+        """根据经纬度获取当前天气，使用 Open-Meteo（无需API Key）"""
+        import requests
+        url = (
+            "https://api.open-meteo.com/v1/forecast"
+            f"?latitude={latitude}&longitude={longitude}&current_weather=true&hourly=temperature_2m,precipitation"
+        )
+        try:
+            resp = requests.get(url, timeout=8)
+            resp.raise_for_status()
+            data = resp.json()
+            current = data.get("current_weather", {})
+            result = {
+                "address": address_hint,
+                "latitude": latitude,
+                "longitude": longitude,
+                "temperature": current.get("temperature"),
+                "windspeed": current.get("windspeed"),
+                "winddirection": current.get("winddirection"),
+                "weathercode": current.get("weathercode"),
+                "time": current.get("time"),
+            }
+            hourly = data.get("hourly", {})
+            result["hourly"] = {
+                "time": hourly.get("time", [])[:6],
+                "temperature_2m": hourly.get("temperature_2m", [])[:6],
+                "precipitation": hourly.get("precipitation", [])[:6],
+            }
+            return result
+        except Exception as e:
+            print(f"天气API请求失败: {str(e)}")
+            raise
     
     def analyze_food_nutrition(self, food_name: str) -> dict:
         """
@@ -243,13 +302,22 @@ class AIService:
         try:
             location = self.geocoder.reverse((latitude, longitude), timeout=5, language='zh')
             if location:
-                address = location.raw.get('address', {})
+                # 从 geopy Location 中提取原始地址字典
+                raw = getattr(location, 'raw', {}) or {}
+                address = raw.get('address', {}) if isinstance(raw.get('address', {}), dict) else {}
+
+                city = address.get('city') or address.get('town') or address.get('village') or address.get('municipality') or ''
+                district = address.get('suburb') or address.get('district') or address.get('county') or ''
+                province = address.get('state') or address.get('province') or address.get('region') or ''
+                country = address.get('country') or ''
+                full_address = location.address or (raw.get('display_name') or '')
+
                 return {
-                    'city': address.get('city') or address.get('town') or address.get('village', ''),
-                    'district': address.get('suburb') or address.get('district') or address.get('county', ''),
-                    'province': address.get('state') or address.get('province', ''),
-                    'country': address.get('country', ''),
-                    'full_address': location.address or ''
+                    'city': city,
+                    'district': district,
+                    'province': province,
+                    'country': country,
+                    'full_address': full_address
                 }
         except (GeocoderTimedOut, GeocoderServiceError, Exception) as e:
             print(f"地理编码失败: {str(e)}")
@@ -262,6 +330,17 @@ class AIService:
         calories_info = ""
         if calories_intake > 0:
             calories_info = f"\n用户今日已摄入卡路里：{calories_intake:.1f} kcal"
+        # 当前系统日期（用于约束模型不要抄示例日期）
+        from datetime import datetime
+        today_str = datetime.now().date().strftime("%Y-%m-%d")
+        
+        # 从查询中尝试解析显式地点/地址
+        explicit_place = self._extract_explicit_place_from_query(query)
+        explicit_place_hint = ""
+        if explicit_place and explicit_place.get("placeName"):
+            ep_city = explicit_place.get("city") or ""
+            ep_name = explicit_place.get("placeName")
+            explicit_place_hint = f"\n用户查询包含明确地点/地址：{ep_city + (ep_name if not ep_city or ep_name.startswith(ep_city) else ep_name)}\n重要：如果查询中提供了明确地点/地址，destination必须优先使用该地点或与其同一城市的具体真实地点，不要使用模糊名称。"
         
         # 优先从查询中提取城市信息（如"我在北京"、"北京"等）
         query_city = None
@@ -328,7 +407,10 @@ class AIService:
 
 用户查询："{query}"
 {calories_info}
+    {explicit_place_hint}
 {location_hint}
+
+系统当前日期：{today_str}
 
 要求提取的信息：
 1. destination: 运动区域/起点（必须是具体的地点名称，不要使用"附近"、"附近XX"、"当前位置附近"等模糊描述）
@@ -357,15 +439,7 @@ class AIService:
 
 只返回JSON，不要其他解释。
 
-返回格式示例：
-{{
-    "destination": "中央公园",
-    "startDate": "2026-01-27",
-    "endDate": "2026-01-27",
-    "days": 1,
-    "calories_target": 300,
-    "exercise_type": "散步"
-}}
+严格禁止抄写任何示例值（尤其是日期）。startDate/endDate 必须根据用户查询或当前系统日期 {today_str} 计算。
 
 注意：
 - 如果查询中提到"周末"，需要计算最近的周六和周日日期，days=2
@@ -408,6 +482,13 @@ class AIService:
                             destination = "运动场所"
                         intent["destination"] = destination
                     
+                    # 如果查询提供了明确地点/地址，优先覆盖destination
+                    if explicit_place and explicit_place.get("placeName"):
+                        city_prefix = explicit_place.get("city")
+                        cleaned = self._sanitize_place_name(explicit_place["placeName"], city_prefix=city_prefix)
+                        if cleaned:
+                            intent["destination"] = cleaned
+                    
                     return intent
                 else:
                     raise ValueError("未找到JSON数据")
@@ -440,6 +521,14 @@ class AIService:
             # 这里可以根据需要接入地理编码API，或者使用AI生成
             # 暂时使用一个通用的描述，但会在prompt中要求AI生成具体名称
             destination = "附近运动场所"  # 这个会在prompt中被AI替换为具体名称
+        
+        # 明确查询中的地点优先
+        explicit_place = self._extract_explicit_place_from_query(query)
+        if explicit_place and explicit_place.get("placeName"):
+            city_prefix = explicit_place.get("city")
+            cleaned = self._sanitize_place_name(explicit_place["placeName"], city_prefix=city_prefix)
+            if cleaned:
+                destination = cleaned
         
         days = intent.get("days", 1)
         calories_target = intent.get("calories_target", 200)
@@ -570,10 +659,6 @@ class AIService:
 目标消耗卡路里：{calories_target} kcal
 {exercise_type_text}
 {preference_text}
-{calories_context}
-{location_context}
-
-{title_hint}
 
 要求：
 1. 生成具体的运动安排，包括运动类型、地点、时长等
@@ -651,10 +736,15 @@ class AIService:
                         trip_data["travelers"] = ["本人"]
                     
                     # 后处理：确保destination和placeName都是具体的地点名称
-                    trip_data = self._ensure_specific_locations(trip_data, user_location)
+                    trip_data = self._ensure_specific_locations(trip_data, user_location, city_prefix=final_city)
+                    # 进一步规范与清洗地点名称，避免重复与虚构词
+                    trip_data = self._normalize_plan_locations(trip_data, city_prefix=final_city)
                     
                     # 后处理：确保地点多样性
                     trip_data = self._ensure_location_diversity(trip_data)
+                    
+                    # 后处理：根据提示词或当前时间动态调整startTime，避免固定时间
+                    trip_data = self._adjust_plan_times(trip_data, intent, query)
                     
                     return trip_data
                 else:
@@ -675,6 +765,21 @@ class AIService:
         start_date_str = intent.get("startDate")
         end_date_str = intent.get("endDate")
         days = intent.get("days", 1)
+
+        # 如果模型抄了固定示例日期（如 2026-01-27），或缺失，则用今天纠正
+        try:
+            if (not start_date_str) or (start_date_str.strip() in {"2026-01-27", "1970-01-01"}):
+                intent["startDate"] = today.strftime("%Y-%m-%d")
+                start_date_str = intent["startDate"]
+                if not end_date_str:
+                    intent["endDate"] = start_date_str
+                    end_date_str = start_date_str
+        except Exception:
+            intent["startDate"] = today.strftime("%Y-%m-%d")
+            start_date_str = intent["startDate"]
+            if not end_date_str:
+                intent["endDate"] = start_date_str
+                end_date_str = start_date_str
         
         # 如果startDate和endDate都存在，计算实际天数
         if start_date_str and end_date_str:
@@ -725,6 +830,10 @@ class AIService:
             place_name = item.get("placeName", "")
             place_type = item.get("placeType", "walking")
             
+            # 清洗不合理/虚构名称
+            place_name = self._sanitize_place_name(place_name)
+            item["placeName"] = place_name
+
             # 如果地点名称已使用，生成一个新的
             if place_name in used_places:
                 # 根据运动类型选择合适的地点
@@ -751,17 +860,95 @@ class AIService:
                                 if city in place_name:
                                     city_prefix = city
                                     break
-                            item["placeName"] = f"{city_prefix}{new_place}" if city_prefix else new_place
+                            cleaned_new = self._sanitize_place_name(f"{city_prefix}{new_place}") if city_prefix else self._sanitize_place_name(new_place)
+                            item["placeName"] = cleaned_new
                         else:
-                            item["placeName"] = new_place
+                            item["placeName"] = self._sanitize_place_name(new_place)
                         used_places.add(item["placeName"])
                         break
             else:
                 used_places.add(place_name)
         
         return trip_data
+
+    def _adjust_plan_times(self, trip_data: dict, intent: dict, query: str) -> dict:
+        """根据提示词（早餐/午餐/晚餐/早上/下午/晚上）或当前时间，动态设置每个节点的startTime，避免固定时间"""
+        try:
+            from datetime import datetime, timedelta, time
+        except Exception:
+            return trip_data
+
+        # 简单解析提示词
+        q = (query or "").strip()
+        def _hint_from_query(q: str) -> str | None:
+            if not q:
+                return None
+            if any(k in q for k in ["早餐", "早饭", "早上", "上午"]):
+                return "breakfast"
+            if any(k in q for k in ["午餐", "午饭", "中午"]):
+                return "lunch"
+            if any(k in q for k in ["晚餐", "晚饭", "傍晚", "晚上", "夜间"]):
+                return "dinner"
+            if "下午" in q:
+                return "afternoon"
+            return None
+
+        hint = _hint_from_query(q)
+        start_date_str = trip_data.get("startDate") or intent.get("startDate")
+        today = datetime.now().date()
+        try:
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date() if start_date_str else today
+        except Exception:
+            start_date = today
+
+        now_dt = datetime.now()
+
+        def _compute_time_for_day(day_index: int) -> str:
+            # 动态偏移：30-60分钟范围内随dayIndex变化
+            offset_min = 30 + ((day_index * 11) % 31)  # 30..60
+
+            # 根据提示词选择基础时间
+            if hint == "breakfast":
+                base_t = time(8, 0)
+            elif hint == "lunch":
+                base_t = time(12, 0)
+            elif hint == "dinner":
+                base_t = time(19, 0)
+            elif hint == "afternoon":
+                base_t = time(15, 0)
+            else:
+                # 无提示词：如果第一天且是今天，用当前时间+偏移；否则用傍晚基准
+                if day_index == 1 and start_date == today:
+                    t = (now_dt + timedelta(minutes=offset_min)).time()
+                    return f"{t.hour:02d}:{t.minute:02d}"
+                base_t = time(18, 0)
+
+            dt = datetime.combine(today, base_t) + timedelta(minutes=offset_min)
+            # 限制在合理范围（06:30 - 21:30），超界则截断
+            min_dt = datetime.combine(today, time(6, 30))
+            max_dt = datetime.combine(today, time(21, 30))
+            if dt < min_dt:
+                dt = min_dt
+            if dt > max_dt:
+                dt = max_dt
+            return f"{dt.hour:02d}:{dt.minute:02d}"
+
+        items = trip_data.get("items") or []
+        for item in items:
+            day_index = 1
+            try:
+                di = item.get("dayIndex")
+                if isinstance(di, int):
+                    day_index = di
+                elif isinstance(di, str) and di.isdigit():
+                    day_index = int(di)
+            except Exception:
+                pass
+            item["startTime"] = _compute_time_for_day(day_index)
+
+        return trip_data
     
-    def _ensure_specific_locations(self, trip_data: dict, user_location: dict = None) -> dict:
+    def _ensure_specific_locations(self, trip_data: dict, user_location: dict = None, city_prefix: Optional[str] = None) -> dict:
         """确保destination和placeName都是具体的地点名称，而不是模糊描述"""
         # 模糊描述的常见模式
         vague_patterns = ["附近", "当前位置附近", "附近公园", "附近步道", "附近健身房", "小区周边"]
@@ -778,6 +965,10 @@ class AIService:
                 trip_data["destination"] = "运动场所"
             else:
                 trip_data["destination"] = "运动场所"
+        
+        # 城市前缀规范
+        if city_prefix:
+            trip_data["destination"] = self._sanitize_place_name(trip_data["destination"], city_prefix=city_prefix)
         
         # 处理items中的placeName
         if "items" in trip_data:
@@ -799,10 +990,10 @@ class AIService:
                             "outdoor": "户外运动场"
                         }
                         place_name = type_name_map.get(place_type, "运动场所")
-                    item["placeName"] = place_name
+                    item["placeName"] = self._sanitize_place_name(place_name, city_prefix=city_prefix)
                 elif place_name in vague_patterns or not place_name:
                     if destination and destination not in vague_patterns and "附近" not in destination:
-                        item["placeName"] = destination
+                        item["placeName"] = self._sanitize_place_name(destination, city_prefix=city_prefix)
                     else:
                         # 根据placeType生成一个具体名称
                         place_type = item.get("placeType", "walking")
@@ -815,8 +1006,83 @@ class AIService:
                             "indoor": "室内运动场",
                             "outdoor": "户外运动场"
                         }
-                        item["placeName"] = type_name_map.get(place_type, "运动场所")
+                        item["placeName"] = self._sanitize_place_name(type_name_map.get(place_type, "运动场所"), city_prefix=city_prefix)
+                else:
+                    item["placeName"] = self._sanitize_place_name(place_name, city_prefix=city_prefix)
         
+        return trip_data
+
+    def _sanitize_place_name(self, name: str, city_prefix: Optional[str] = None) -> str:
+        """清洗地点名称，避免模糊/虚构词，规范城市前缀"""
+        if not name:
+            return "运动场所"
+        name = name.strip()
+        # 过滤常见虚构/模糊词
+        forbidden_tokens = ["附近", "示例", "测试", "随机", "XX", "虚构", "虚空", "unknown", "N/A", "位置"]
+        for tok in forbidden_tokens:
+            name = name.replace(tok, "").strip()
+        if not name:
+            name = "运动场所"
+        
+        # 如果提供城市前缀且名称未包含城市，添加前缀
+        if city_prefix and city_prefix not in name:
+            name = f"{city_prefix}{name}"
+        
+        # 限制长度，避免过长
+        if len(name) > 30:
+            name = name[:30]
+        return name
+
+    def _extract_explicit_place_from_query(self, query: str) -> Optional[Dict[str, str]]:
+        """从查询文本中提取显式地点/地址（简单启发式）"""
+        if not query:
+            return None
+        query = query.strip()
+        # 识别常见城市后缀/行政区关键词
+        admin_keywords = ["省", "市", "区", "县", "镇", "街道"]
+        place_keywords = [
+            "公园", "步道", "健身房", "体育中心", "运动中心", "健身广场",
+            "跑步道", "骑行道", "自行车道", "绿道", "体育场", "运动场", "健身步道"
+        ]
+        detected_city = None
+        # 尝试匹配显式城市（如 北京市/上海市/杭州）
+        for kw in ["北京", "上海", "广州", "深圳", "杭州", "成都", "武汉", "西安", "南京", "重庆", "天津", "苏州", "长沙", "郑州", "东莞", "青岛", "沈阳", "宁波", "昆明", "大连"]:
+            if kw in query:
+                detected_city = kw
+                break
+        # 查找包含地点后缀的片段
+        best = None
+        for pk in place_keywords:
+            idx = query.find(pk)
+            if idx != -1:
+                # 取前后窗口作为地点名称（避免过长）
+                start = max(0, idx - 8)
+                end = min(len(query), idx + len(pk))
+                candidate = query[start:end].strip()
+                # 清理语气词
+                candidate = candidate.replace("去", "").replace("在", "").replace("到", "").replace("吧", "").strip()
+                if candidate:
+                    best = candidate
+                    break
+        if best or detected_city:
+            return {"city": detected_city, "placeName": best or ""}
+        return None
+
+    def _normalize_plan_locations(self, trip_data: dict, city_prefix: Optional[str] = None) -> dict:
+        """规范与去重 items 中的地点名称，避免重复与不合理名称"""
+        if "items" not in trip_data:
+            return trip_data
+        seen = set()
+        for item in trip_data["items"]:
+            name = item.get("placeName", "")
+            cleaned = self._sanitize_place_name(name, city_prefix=city_prefix)
+            # 保证唯一性：如重复，尝试添加类型后缀
+            if cleaned in seen:
+                place_type = item.get("placeType", "")
+                alt = self._sanitize_place_name(f"{cleaned}-{place_type}" if place_type else f"{cleaned}-A", city_prefix=None)
+                cleaned = alt if alt not in seen else f"{cleaned}-B"
+            item["placeName"] = cleaned
+            seen.add(cleaned)
         return trip_data
     
     def _get_default_exercise_plan(self, intent: dict, calories_target: int = 200) -> dict:

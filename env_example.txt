@@ -1,0 +1,15 @@
+# 阿里云通义千问API Key
+# 获取地址: https://dashscope.aliyuncs.com/
+DASHSCOPE_API_KEY=sk-e541297af3a543bcad7abee48f663f1e
+ARK_API_KEY=e64bf5f4-b1ba-432f-b90a-eeea850cb425
+# DASHSCOPE_API_KEY=null
+
+# 服务器配置
+HOST=0.0.0.0
+PORT=8000
+
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=Zyu050429000
+DB_NAME=LifeHub
