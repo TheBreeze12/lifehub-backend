@@ -125,3 +125,7 @@ htmlcov/
 .dmypy.json
 dmypy.json
 
+# 功能需求文档（不上传到GitHub）
+功能需求清单.md
+功能实现对比.md
+

@@ -22,7 +22,10 @@
 | **餐饮** | `/api/food/records/today`      | GET  | 获取今日饮食记录   |
 | **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
 | **用户** | `/api/user/register`           | POST | 用户注册           |
-| **用户** | `/api/user/data`               | GET  | 用户登录           |
+| **用户** | `/api/user/login`              | POST | 用户登录（JWT）    |
+| **用户** | `/api/user/refresh`            | POST | 刷新Token          |
+| **用户** | `/api/user/me`                 | GET  | 获取当前用户（需认证）|
+| **用户** | `/api/user/data`               | GET  | 用户登录（旧版）   |
 | **用户** | `/api/user/preferences`        | GET  | 获取用户偏好       |
 | **用户** | `/api/user/preferences`        | PUT  | 更新用户偏好       |
 | **运动** | `/api/trip/generate`           | POST | 生成运动计划       |
@@ -1157,11 +1160,184 @@ GET http://localhost:8000/api/trip/456
 ---
 
 
+### 18. 用户登录（JWT认证）⭐
+
+**接口地址**: `POST /api/user/login`
+
+**接口描述**: 用户登录，返回JWT双令牌（Access Token + Refresh Token）
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名   | 类型   | 必填 | 说明                   |
+| -------- | ------ | ---- | ---------------------- |
+| nickname | string | 是   | 用户昵称，最大50个字符 |
+| password | string | 是   | 用户密码，6-128个字符  |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/user/login
+Content-Type: application/json
+
+{
+  "nickname": "健康达人",
+  "password": "securepassword123"
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "登录成功",
+  "data": {
+    "userId": 123,
+    "nickname": "健康达人",
+    "healthGoal": "reduce_fat",
+    "allergens": ["海鲜", "花生"],
+    "travelPreference": "self_driving",
+    "dailyBudget": 500
+  },
+  "token": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "bearer",
+    "expires_in": 1800
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                  | 类型         | 说明                          |
+| --------------------- | ------------ | ----------------------------- |
+| code                  | int          | 状态码，200表示成功           |
+| message               | string       | 响应消息                      |
+| data                  | object       | 用户偏好数据                  |
+| token                 | object       | JWT Token信息                 |
+| token.access_token    | string       | Access Token，用于API认证     |
+| token.refresh_token   | string       | Refresh Token，用于刷新Token  |
+| token.token_type      | string       | Token类型，固定为"bearer"     |
+| token.expires_in      | int          | Access Token过期时间（秒）    |
+
+**错误响应**:
+- 用户不存在（HTTP 404）: `{"detail": "用户不存在，nickname: 健康达人"}`
+- 密码错误（HTTP 401）: `{"detail": "密码错误"}`
+
+---
+
+### 19. 刷新Token ⭐
+
+**接口地址**: `POST /api/user/refresh`
+
+**接口描述**: 使用Refresh Token获取新的Access Token和Refresh Token
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名        | 类型   | 必填 | 说明          |
+| ------------- | ------ | ---- | ------------- |
+| refresh_token | string | 是   | Refresh Token |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/user/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "Token刷新成功",
+  "token": {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "token_type": "bearer",
+    "expires_in": 1800
+  }
+}
+```
+
+**错误响应**:
+- 无效的Refresh Token（HTTP 401）: `{"detail": "无效的Refresh Token"}`
+
+---
+
+### 20. 获取当前用户信息（需认证）⭐
+
+**接口地址**: `GET /api/user/me`
+
+**接口描述**: 获取当前登录用户信息，需要JWT认证
+
+**请求头**:
+```
+Authorization: Bearer <access_token>
+```
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/user/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "userId": 123,
+    "nickname": "健康达人",
+    "healthGoal": "reduce_fat",
+    "allergens": ["海鲜", "花生"],
+    "travelPreference": "self_driving",
+    "dailyBudget": 500
+  }
+}
+```
+
+**错误响应**:
+- 未提供认证凭证（HTTP 401）: `{"detail": "未提供认证凭证"}`
+- 无效的认证凭证（HTTP 401）: `{"detail": "无效的认证凭证"}`
+
+---
+
+## JWT认证说明
+
+### Token类型
+- **Access Token**: 用于API认证，有效期30分钟
+- **Refresh Token**: 用于刷新Access Token，有效期7天
+
+### 使用方法
+1. 调用 `/api/user/login` 获取Token对
+2. 将Access Token放入请求头：`Authorization: Bearer <access_token>`
+3. Access Token过期前，使用Refresh Token调用 `/api/user/refresh` 获取新Token
+
+### 注意事项
+- Access Token过期后需要使用Refresh Token刷新
+- Refresh Token过期后需要重新登录
+- 密码使用bcrypt加密存储
+- 旧版 `/api/user/data` 接口仍可用（向后兼容）
+
+---
+
 ## 错误码说明
 
 | HTTP状态码 | 说明             |
 | ---------- | ---------------- |
 | 200        | 请求成功         |
+| 401        | 未授权（Token无效或密码错误） |
+| 404        | 资源不存在       |
 | 422        | 请求参数验证失败 |
 | 500        | 服务器内部错误   |
 
@@ -1193,6 +1369,14 @@ GET http://localhost:8000/api/trip/456
 ---
 
 ## 更新日志
+
+### v1.1.0 (2026-02-03)
+- ✅ 实现JWT双令牌认证机制（Access Token + Refresh Token）
+- ✅ 添加用户登录接口 `/api/user/login`（返回JWT Token）
+- ✅ 添加Token刷新接口 `/api/user/refresh`
+- ✅ 添加获取当前用户接口 `/api/user/me`（需JWT认证）
+- ✅ 密码使用bcrypt加密存储
+- ✅ 保留旧版登录接口向后兼容
 
 ### v1.0.0 (2026-01-22)
 - ✅ 实现菜品营养分析API

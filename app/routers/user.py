@@ -8,10 +8,23 @@ from app.models.user import (
     UserPreferencesResponse, 
     UserPreferencesData,
     UserRegistrationRequest,
-    UserRegistrationResponse
+    UserRegistrationResponse,
+    LoginRequest,
+    LoginResponse,
+    TokenInfo,
+    RefreshTokenRequest,
+    RefreshTokenResponse
 )
 from app.database import get_db
 from app.db_models.user import User
+from app.utils.auth import (
+    get_password_hash,
+    verify_password,
+    create_tokens,
+    verify_refresh_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from app.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/user", tags=["用户中心"])
 
@@ -63,16 +76,18 @@ async def get_user_preferences(
 
 
 @router.get("/data", response_model=UserPreferencesResponse)
-async def get_user_preferences(
+async def get_user_data_legacy(
     nickname: str,
     password: str,
     db: Session = Depends(get_db)
 ):
     """
-    获取用户偏好
+    获取用户偏好（旧版登录接口，兼容保留）
     
     - **nickname**: 用户昵称
     - **password**: 用户密码
+    
+    注意：推荐使用 POST /api/user/login 接口进行登录，该接口返回JWT Token
     """
     try:
         # 查询用户
@@ -84,7 +99,14 @@ async def get_user_preferences(
                 detail=f"用户不存在，nickname: {nickname}"
             )
         
-        if user.password != password:
+        # 兼容新旧密码验证（新用户使用哈希密码，旧用户使用明文密码）
+        password_valid = False
+        if user.password.startswith("$2b$"):  # bcrypt哈希密码
+            password_valid = verify_password(password, user.password)
+        else:
+            password_valid = (user.password == password)
+        
+        if not password_valid:
             raise HTTPException(
                 status_code=401,
                 detail="密码错误"
@@ -114,6 +136,137 @@ async def get_user_preferences(
             status_code=500, 
             detail=f"获取用户偏好失败: {str(e)}"
         )
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(
+    request: LoginRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    用户登录（JWT认证）
+    
+    - **nickname**: 用户昵称
+    - **password**: 用户密码
+    
+    返回Access Token和Refresh Token，Access Token有效期30分钟，Refresh Token有效期7天
+    """
+    try:
+        # 查询用户
+        user = db.query(User).filter(User.nickname == request.nickname).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"用户不存在，nickname: {request.nickname}"
+            )
+        
+        # 兼容新旧密码验证（新用户使用哈希密码，旧用户使用明文密码）
+        password_valid = False
+        if user.password.startswith("$2b$"):  # bcrypt哈希密码
+            password_valid = verify_password(request.password, user.password)
+        else:
+            password_valid = (user.password == request.password)
+        
+        if not password_valid:
+            raise HTTPException(
+                status_code=401,
+                detail="密码错误"
+            )
+        
+        # 生成JWT Token
+        access_token, refresh_token = create_tokens(user.id, user.nickname)
+        
+        # 构建响应数据
+        preferences_data = UserPreferencesData(
+            userId=user.id,
+            nickname=user.nickname,
+            healthGoal=user.health_goal,
+            allergens=user.allergens if user.allergens else [],
+            travelPreference=user.travel_preference,
+            dailyBudget=user.daily_budget
+        )
+        
+        token_info = TokenInfo(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        )
+        
+        return LoginResponse(
+            code=200,
+            message="登录成功",
+            data=preferences_data,
+            token=token_info
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"登录失败: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"登录失败: {str(e)}"
+        )
+
+
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_token(
+    request: RefreshTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    刷新Access Token
+    
+    - **refresh_token**: Refresh Token
+    
+    使用有效的Refresh Token获取新的Access Token和Refresh Token
+    """
+    try:
+        # 验证Refresh Token
+        token_data = verify_refresh_token(request.refresh_token)
+        
+        if token_data is None:
+            raise HTTPException(
+                status_code=401,
+                detail="无效的Refresh Token"
+            )
+        
+        # 查询用户确保存在
+        user = db.query(User).filter(User.id == token_data.user_id).first()
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="用户不存在"
+            )
+        
+        # 生成新的Token对
+        access_token, refresh_token = create_tokens(user.id, user.nickname)
+        
+        token_info = TokenInfo(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        )
+        
+        return RefreshTokenResponse(
+            code=200,
+            message="Token刷新成功",
+            token=token_info
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Token刷新失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Token刷新失败: {str(e)}"
+        )
+
 
 @router.put("/preferences", response_model=UserPreferencesResponse)
 async def update_user_preferences(
@@ -179,17 +332,45 @@ async def update_user_preferences(
             detail=f"更新用户偏好失败: {str(e)}"
         )
 
+
+@router.get("/me", response_model=UserPreferencesResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取当前登录用户信息（需要JWT认证）
+    
+    请求头需要包含: Authorization: Bearer <access_token>
+    """
+    preferences_data = UserPreferencesData(
+        userId=current_user.id,
+        nickname=current_user.nickname,
+        healthGoal=current_user.health_goal,
+        allergens=current_user.allergens if current_user.allergens else [],
+        travelPreference=current_user.travel_preference,
+        dailyBudget=current_user.daily_budget
+    )
+    
+    return UserPreferencesResponse(
+        code=200,
+        message="获取成功",
+        data=preferences_data
+    )
+
+
 @router.post("/register", response_model=UserRegistrationResponse)
 async def register_user(
     request: UserRegistrationRequest,
     db: Session = Depends(get_db)
 ) -> UserRegistrationResponse:
     """
-    注册新用户
+    注册新用户（密码使用bcrypt加密存储）
     """
+    # 使用bcrypt对密码进行哈希加密
+    hashed_password = get_password_hash(request.password)
     new_user = User(
         nickname=request.nickname,
-        password=request.password
+        password=hashed_password
     )
     # 如果用户名重复或者其他错误，会在这里抛出异常
     try:
@@ -204,9 +385,11 @@ async def register_user(
         db.refresh(new_user)
         return UserRegistrationResponse(
             code=200,
-        message="注册成功",
-        userId=new_user.id
+            message="注册成功",
+            userId=new_user.id
         )
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         print(f"用户注册失败: {str(e)}")
