@@ -200,6 +200,32 @@ class DietRecordsByDateResponse(BaseModel):
         }
 
 
+class UpdateDietRecordRequest(BaseModel):
+    """更新饮食记录请求"""
+    userId: int = Field(..., description="用户ID（用于权限校验）", gt=0)
+    foodName: str | None = Field(None, description="菜品名称", min_length=1, max_length=100)
+    calories: float | None = Field(None, description="热量（kcal）", ge=0)
+    protein: float | None = Field(None, description="蛋白质（g）", ge=0)
+    fat: float | None = Field(None, description="脂肪（g）", ge=0)
+    carbs: float | None = Field(None, description="碳水化合物（g）", ge=0)
+    mealType: str | None = Field(None, description="餐次: 早餐/午餐/晚餐/加餐 或 breakfast/lunch/dinner/snack")
+    recordDate: str | None = Field(None, description="记录日期（YYYY-MM-DD格式）")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "userId": 123,
+                "foodName": "更新的菜名",
+                "calories": 300.0,
+                "protein": 25.0,
+                "fat": 15.0,
+                "carbs": 20.0,
+                "mealType": "午餐",
+                "recordDate": "2026-01-23"
+            }
+        }
+
+
 class ApiResponse(BaseModel):
     """通用API响应"""
     code: int = Field(200, description="状态码，200表示成功")

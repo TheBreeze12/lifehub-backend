@@ -20,6 +20,8 @@
 | **餐饮** | `/api/food/record`             | POST | 添加饮食记录       |
 | **餐饮** | `/api/food/records`            | GET  | 获取所有饮食记录   |
 | **餐饮** | `/api/food/records/today`      | GET  | 获取今日饮食记录   |
+| **餐饮** | `/api/food/diet/{record_id}`   | PUT  | 更新饮食记录       |
+| **餐饮** | `/api/food/diet/{record_id}`   | DELETE | 删除饮食记录     |
 | **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
 | **用户** | `/api/user/register`           | POST | 用户注册           |
 | **用户** | `/api/user/login`              | POST | 用户登录（JWT）    |
@@ -510,6 +512,137 @@ GET http://localhost:8000/api/food/records/today?userId=123
       }
     ]
   }
+}
+```
+
+---
+
+### 9.1 更新饮食记录 ⭐
+
+**接口地址**: `PUT /api/food/diet/{record_id}`
+
+**接口描述**: 更新指定的饮食记录（支持部分更新，只能操作自己的记录）
+
+**路径参数**:
+| 参数名    | 类型 | 必填 | 说明   |
+| --------- | ---- | ---- | ------ |
+| record_id | int  | 是   | 记录ID |
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名     | 类型         | 必填 | 说明                                                      |
+| ---------- | ------------ | ---- | --------------------------------------------------------- |
+| userId     | int          | 是   | 用户ID（用于权限校验）                                    |
+| foodName   | string\|null | 否   | 菜品名称，1-100个字符                                     |
+| calories   | float\|null  | 否   | 热量（kcal），≥0                                          |
+| protein    | float\|null  | 否   | 蛋白质（g），≥0                                           |
+| fat        | float\|null  | 否   | 脂肪（g），≥0                                             |
+| carbs      | float\|null  | 否   | 碳水化合物（g），≥0                                       |
+| mealType   | string\|null | 否   | 餐次：早餐/午餐/晚餐/加餐 或 breakfast/lunch/dinner/snack |
+| recordDate | string\|null | 否   | 记录日期（YYYY-MM-DD格式）                                |
+
+**请求示例**:
+```bash
+PUT http://localhost:8000/api/food/diet/1
+Content-Type: application/json
+
+{
+  "userId": 123,
+  "foodName": "更新的菜名",
+  "calories": 300.0
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "更新成功",
+  "data": {
+    "id": 1,
+    "foodName": "更新的菜名",
+    "calories": 300.0,
+    "protein": 28.0,
+    "fat": 18.0,
+    "carbs": 15.0,
+    "mealType": "lunch",
+    "recordDate": "2026-01-23"
+  }
+}
+```
+
+**错误响应**:
+
+*记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "饮食记录不存在，record_id: 1"
+}
+```
+
+*无权操作*（HTTP 403）:
+```json
+{
+  "detail": "无权操作此记录，只能修改自己的饮食记录"
+}
+```
+
+*日期格式错误*（HTTP 400）:
+```json
+{
+  "detail": "日期格式错误，请使用 YYYY-MM-DD 格式"
+}
+```
+
+---
+
+### 9.2 删除饮食记录 ⭐
+
+**接口地址**: `DELETE /api/food/diet/{record_id}`
+
+**接口描述**: 删除指定的饮食记录（只能删除自己的记录）
+
+**路径参数**:
+| 参数名    | 类型 | 必填 | 说明   |
+| --------- | ---- | ---- | ------ |
+| record_id | int  | 是   | 记录ID |
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                   |
+| ------ | ---- | ---- | ---------------------- |
+| userId | int  | 是   | 用户ID（用于权限校验） |
+
+**请求示例**:
+```bash
+DELETE http://localhost:8000/api/food/diet/1?userId=123
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "删除成功",
+  "data": null
+}
+```
+
+**错误响应**:
+
+*记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "饮食记录不存在，record_id: 1"
+}
+```
+
+*无权操作*（HTTP 403）:
+```json
+{
+  "detail": "无权操作此记录，只能删除自己的饮食记录"
 }
 ```
 
