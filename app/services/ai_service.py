@@ -202,13 +202,29 @@ class AIService:
             raise
     
     def _build_nutrition_prompt(self, food_name: str) -> str:
-        """构建营养分析Prompt"""
-        prompt = f"""请分析菜品"{food_name}"的营养成分，并以JSON格式返回。
+        """
+        构建营养分析Prompt（含过敏原推理）
+        
+        Phase 7增强：在营养分析中同时进行隐性过敏原AI推理
+        """
+        prompt = f"""请分析菜品"{food_name}"的营养成分和可能的过敏原，并以JSON格式返回。
 
 要求：
 1. 估算每100克的营养数据
 2. 给出减脂人群的饮食建议
-3. 只返回JSON，不要其他解释
+3. 分析该菜品可能包含的八大类过敏原（乳制品、鸡蛋、鱼类、甲壳类、花生、树坚果、小麦、大豆）
+4. 特别注意推理隐性过敏原（如：宫保鸡丁通常含花生；蛋炒饭含鸡蛋；炸酱面含小麦和大豆等）
+5. 只返回JSON，不要其他解释
+
+八大类过敏原代码对照：
+- milk: 乳制品（牛奶、奶酪、黄油、奶油等）
+- egg: 鸡蛋（各种蛋类及其制品）
+- fish: 鱼类（各种鱼类及鱼制品）
+- shellfish: 甲壳类（虾、蟹、贝类等海鲜）
+- peanut: 花生（花生及花生制品）
+- tree_nut: 树坚果（杏仁、核桃、腰果等）
+- wheat: 小麦（面粉、面条、面包等含麸质食品）
+- soy: 大豆（豆腐、豆浆、酱油等豆制品）
 
 返回格式：
 {{
@@ -216,16 +232,42 @@ class AIService:
     "protein": 蛋白质数值（克，浮点数）,
     "fat": 脂肪数值（克，浮点数）,
     "carbs": 碳水化合物数值（克，浮点数）,
-    "recommendation": "给减脂人群的建议（50字以内）"
+    "recommendation": "给减脂人群的建议（50字以内）",
+    "allergens": ["过敏原代码列表，如peanut, egg等"],
+    "allergen_reasoning": "过敏原推理说明（说明为什么这道菜可能含有这些过敏原，100字以内）"
 }}
 
-示例：
+示例1（宫保鸡丁）：
+{{
+    "calories": 180.0,
+    "protein": 18.0,
+    "fat": 10.0,
+    "carbs": 8.0,
+    "recommendation": "蛋白质丰富，但花生热量较高，建议适量食用。",
+    "allergens": ["peanut", "soy"],
+    "allergen_reasoning": "宫保鸡丁是经典川菜，主要配料包括花生米（花生过敏原），调味通常使用酱油（大豆过敏原）。"
+}}
+
+示例2（番茄炒蛋）：
 {{
     "calories": 150.0,
     "protein": 10.5,
     "fat": 8.2,
     "carbs": 6.3,
-    "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量。"
+    "recommendation": "营养均衡，蛋白质含量较高，适合减脂期食用。",
+    "allergens": ["egg"],
+    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
+}}
+
+示例3（清蒸鲈鱼）：
+{{
+    "calories": 105.0,
+    "protein": 19.5,
+    "fat": 3.0,
+    "carbs": 0.5,
+    "recommendation": "高蛋白低脂肪，非常适合减脂期食用。",
+    "allergens": ["fish", "soy"],
+    "allergen_reasoning": "鲈鱼属于鱼类过敏原，清蒸时通常使用酱油调味（大豆过敏原）。"
 }}
 
 现在请分析"{food_name}"："""
@@ -233,7 +275,11 @@ class AIService:
         return prompt
     
     def _parse_nutrition_response(self, content: str, food_name: str) -> dict:
-        """解析AI返回的营养数据"""
+        """
+        解析AI返回的营养数据（含过敏原推理）
+        
+        Phase 7增强：解析AI返回的过敏原推理结果
+        """
         try:
             # 尝试从内容中提取JSON
             # 有时AI会返回带有额外文字的内容，需要提取JSON部分
@@ -244,15 +290,30 @@ class AIService:
                 json_str = content[json_start:json_end]
                 data = json.loads(json_str)
                 
-                # 确保所有必需字段存在
+                # 确保所有必需字段存在（包括过敏原字段）
                 result = {
                     "name": food_name,
                     "calories": float(data.get("calories", 150.0)),
                     "protein": float(data.get("protein", 10.0)),
                     "fat": float(data.get("fat", 8.0)),
                     "carbs": float(data.get("carbs", 15.0)),
-                    "recommendation": data.get("recommendation", "营养数据仅供参考")
+                    "recommendation": data.get("recommendation", "营养数据仅供参考"),
+                    # Phase 7: 过敏原推理字段
+                    "allergens": data.get("allergens", []),
+                    "allergen_reasoning": data.get("allergen_reasoning", "")
                 }
+                
+                # 验证过敏原代码是否为有效的八大类
+                valid_allergen_codes = {"milk", "egg", "fish", "shellfish", "peanut", "tree_nut", "wheat", "soy"}
+                if result["allergens"]:
+                    # 过滤掉无效的过敏原代码
+                    result["allergens"] = [
+                        a for a in result["allergens"] 
+                        if isinstance(a, str) and a.lower() in valid_allergen_codes
+                    ]
+                    # 统一转为小写
+                    result["allergens"] = [a.lower() for a in result["allergens"]]
+                
                 return result
             else:
                 raise ValueError("未找到JSON数据")
@@ -270,7 +331,10 @@ class AIService:
             "protein": 0.0,
             "fat": 0.0,
             "carbs": 0.0,
-            "recommendation": f"{food_name}的营养数据暂时无法获取，建议适量食用。"
+            "recommendation": f"{food_name}的营养数据暂时无法获取，建议适量食用。",
+            # Phase 7: 过敏原推理字段（默认值）
+            "allergens": [],
+            "allergen_reasoning": ""
         }
     
     def generate_trip(self, query: str, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None) -> dict:

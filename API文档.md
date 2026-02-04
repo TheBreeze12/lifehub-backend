@@ -128,23 +128,39 @@ Content-Type: application/json
     "protein": 10.5,
     "fat": 8.2,
     "carbs": 6.3,
-    "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量。"
+    "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量。",
+    "allergens": ["egg"],
+    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
   }
 }
 ```
 
 **响应字段说明**:
-| 字段                | 类型    | 说明                  |
-| ------------------- | ------- | --------------------- |
-| success             | boolean | 请求是否成功          |
-| message             | string  | 响应消息              |
-| data                | object  | 菜品数据对象          |
-| data.name           | string  | 菜品名称              |
-| data.calories       | float   | 热量（千卡/100g）     |
-| data.protein        | float   | 蛋白质（克/100g）     |
-| data.fat            | float   | 脂肪（克/100g）       |
-| data.carbs          | float   | 碳水化合物（克/100g） |
-| data.recommendation | string  | AI推荐理由            |
+| 字段                     | 类型     | 说明                                              |
+| ------------------------ | -------- | ------------------------------------------------- |
+| success                  | boolean  | 请求是否成功                                      |
+| message                  | string   | 响应消息                                          |
+| data                     | object   | 菜品数据对象                                      |
+| data.name                | string   | 菜品名称                                          |
+| data.calories            | float    | 热量（千卡/100g）                                 |
+| data.protein             | float    | 蛋白质（克/100g）                                 |
+| data.fat                 | float    | 脂肪（克/100g）                                   |
+| data.carbs               | float    | 碳水化合物（克/100g）                             |
+| data.recommendation      | string   | AI推荐理由                                        |
+| data.allergens           | string[] | AI推理的过敏原代码列表（Phase 7新增）             |
+| data.allergen_reasoning  | string   | 过敏原推理说明（Phase 7新增）                     |
+
+**过敏原代码对照**（八大类）:
+| 代码      | 中文名称 | 英文名称   | 说明                           |
+| --------- | -------- | ---------- | ------------------------------ |
+| milk      | 乳制品   | Milk       | 牛奶、奶酪、黄油、奶油等       |
+| egg       | 鸡蛋     | Egg        | 各种蛋类及其制品               |
+| fish      | 鱼类     | Fish       | 各种鱼类及鱼制品               |
+| shellfish | 甲壳类   | Shellfish  | 虾、蟹、贝类等海鲜             |
+| peanut    | 花生     | Peanut     | 花生及花生制品                 |
+| tree_nut  | 树坚果   | Tree Nuts  | 杏仁、核桃、腰果等             |
+| wheat     | 小麦     | Wheat      | 面粉、面条、面包等含麸质食品   |
+| soy       | 大豆     | Soy        | 豆腐、豆浆、酱油等豆制品       |
 
 **错误响应**:
 

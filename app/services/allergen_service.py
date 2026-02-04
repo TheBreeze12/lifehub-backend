@@ -310,6 +310,122 @@ class AllergenService:
         
         allergen_names = [a["name"] for a in detected_allergens]
         return f"检测到以下过敏原：{', '.join(allergen_names)}"
+    
+    def merge_with_ai_inference(
+        self,
+        food_name: str,
+        keyword_result: Dict,
+        ai_allergens: List[str],
+        ai_reasoning: str,
+        user_allergens: Optional[List[str]] = None
+    ) -> Dict:
+        """
+        Phase 7: 合并关键词检测与AI推理结果
+        
+        将基于关键词匹配的检测结果与AI推理的过敏原结果进行合并，
+        去重并标注来源，提供更全面的过敏原检测结果。
+        
+        Args:
+            food_name: 菜品名称
+            keyword_result: 关键词检测结果（来自check_allergens方法）
+            ai_allergens: AI推理的过敏原代码列表
+            ai_reasoning: AI过敏原推理说明
+            user_allergens: 用户的过敏原列表（用于匹配告警）
+            
+        Returns:
+            合并后的检测结果字典
+        """
+        # 从关键词检测结果中获取已检测的过敏原代码
+        keyword_allergen_codes = set()
+        for allergen in keyword_result.get("detected_allergens", []):
+            keyword_allergen_codes.add(allergen.get("code"))
+        
+        # AI推理的过敏原代码集合
+        ai_allergen_codes = set(ai_allergens) if ai_allergens else set()
+        
+        # 合并后的过敏原列表
+        merged_allergens = []
+        all_codes = keyword_allergen_codes | ai_allergen_codes
+        
+        for code in all_codes:
+            if code not in self.categories:
+                continue
+                
+            category = self.categories[code]
+            
+            # 判断来源
+            from_keyword = code in keyword_allergen_codes
+            from_ai = code in ai_allergen_codes
+            
+            # 获取关键词匹配信息（如果有）
+            matched_keywords = []
+            if from_keyword:
+                for allergen in keyword_result.get("detected_allergens", []):
+                    if allergen.get("code") == code:
+                        matched_keywords = allergen.get("matched_keywords", [])
+                        break
+            
+            # 确定来源标签
+            if from_keyword and from_ai:
+                source = "keyword+ai"
+                confidence = "high"
+            elif from_keyword:
+                source = "keyword"
+                confidence = "high" if len(matched_keywords) > 1 else "medium"
+            else:  # from_ai
+                source = "ai"
+                confidence = "medium"  # AI推理置信度设为中等
+            
+            allergen_info = {
+                "code": category.code,
+                "name": category.name,
+                "name_en": category.name_en,
+                "matched_keywords": matched_keywords,
+                "confidence": confidence,
+                "source": source  # Phase 7新增：来源标识
+            }
+            merged_allergens.append(allergen_info)
+        
+        # 重新生成警告信息
+        warnings = []
+        if user_allergens:
+            user_allergen_lower = [a.lower() for a in user_allergens]
+            for allergen in merged_allergens:
+                if (allergen["name"] in user_allergens or 
+                    allergen["name_en"].lower() in user_allergen_lower or
+                    allergen["code"] in user_allergen_lower or
+                    any(kw in user_allergens for kw in allergen.get("matched_keywords", []))):
+                    
+                    source_text = {
+                        "keyword": "关键词匹配",
+                        "ai": "AI推理",
+                        "keyword+ai": "关键词匹配和AI推理"
+                    }.get(allergen.get("source", ""), "检测")
+                    
+                    warnings.append({
+                        "allergen": allergen["name"],
+                        "level": "high",
+                        "message": f"警告：通过{source_text}检测到您的过敏原【{allergen['name']}】"
+                    })
+        
+        # 构建合并后的结果
+        result = {
+            "food_name": food_name,
+            "detected_allergens": merged_allergens,
+            "allergen_count": len(merged_allergens),
+            "has_allergens": len(merged_allergens) > 0,
+            "warnings": warnings,
+            "has_warnings": len(warnings) > 0,
+            # Phase 7新增字段
+            "ai_reasoning": ai_reasoning,
+            "detection_methods": {
+                "keyword_count": len(keyword_allergen_codes),
+                "ai_count": len(ai_allergen_codes),
+                "merged_count": len(merged_allergens)
+            }
+        }
+        
+        return result
 
 
 # 创建全局服务实例

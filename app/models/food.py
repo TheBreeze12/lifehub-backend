@@ -17,13 +17,16 @@ class FoodRequest(BaseModel):
 
 
 class FoodData(BaseModel):
-    """菜品营养数据"""
+    """菜品营养数据（Phase 7增强：含过敏原推理）"""
     name: str = Field(..., description="菜品名称")
     calories: float = Field(..., description="热量（千卡）")
     protein: float = Field(..., description="蛋白质（克）")
     fat: float = Field(..., description="脂肪（克）")
     carbs: float = Field(..., description="碳水化合物（克）")
     recommendation: str = Field(..., description="AI推荐理由")
+    # Phase 7: 过敏原推理字段
+    allergens: list[str] = Field(default=[], description="AI推理的过敏原代码列表（如peanut, egg等）")
+    allergen_reasoning: str = Field(default="", description="过敏原推理说明")
     
     class Config:
         json_schema_extra = {
@@ -33,13 +36,15 @@ class FoodData(BaseModel):
                 "protein": 10.5,
                 "fat": 8.2,
                 "carbs": 6.3,
-                "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量，搭配粗粮主食。"
+                "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量，搭配粗粮主食。",
+                "allergens": ["egg"],
+                "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
             }
         }
 
 
 class FoodResponse(BaseModel):
-    """API响应"""
+    """API响应（Phase 7增强：含过敏原推理）"""
     success: bool = Field(..., description="请求是否成功")
     message: str = Field(default="", description="消息")
     data: FoodData | None = Field(None, description="菜品数据")
@@ -55,7 +60,9 @@ class FoodResponse(BaseModel):
                     "protein": 10.5,
                     "fat": 8.2,
                     "carbs": 6.3,
-                    "recommendation": "这道菜营养均衡，适合减脂期食用"
+                    "recommendation": "这道菜营养均衡，适合减脂期食用",
+                    "allergens": ["egg"],
+                    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
                 }
             }
         }
