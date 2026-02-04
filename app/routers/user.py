@@ -56,7 +56,11 @@ async def get_user_preferences(
             healthGoal=user.health_goal,
             allergens=user.allergens if user.allergens else [],
             travelPreference=user.travel_preference,
-            dailyBudget=user.daily_budget
+            dailyBudget=user.daily_budget,
+            weight=user.weight,
+            height=user.height,
+            age=user.age,
+            gender=user.gender
         )
         
         return UserPreferencesResponse(
@@ -119,7 +123,11 @@ async def get_user_data_legacy(
             healthGoal=user.health_goal,
             allergens=user.allergens if user.allergens else [],
             travelPreference=user.travel_preference,
-            dailyBudget=user.daily_budget
+            dailyBudget=user.daily_budget,
+            weight=user.weight,
+            height=user.height,
+            age=user.age,
+            gender=user.gender
         )
         
         return UserPreferencesResponse(
@@ -184,7 +192,11 @@ async def login(
             healthGoal=user.health_goal,
             allergens=user.allergens if user.allergens else [],
             travelPreference=user.travel_preference,
-            dailyBudget=user.daily_budget
+            dailyBudget=user.daily_budget,
+            weight=user.weight,
+            height=user.height,
+            age=user.age,
+            gender=user.gender
         )
         
         token_info = TokenInfo(
@@ -281,6 +293,10 @@ async def update_user_preferences(
     - **allergens**: 过敏原列表（可选）
     - **travelPreference**: 出行偏好（可选）
     - **dailyBudget**: 出行日预算（可选）
+    - **weight**: 体重（kg，可选）
+    - **height**: 身高（cm，可选）
+    - **age**: 年龄（可选）
+    - **gender**: 性别（male/female/other，可选）
     """
     try:
         # 查询用户
@@ -301,6 +317,15 @@ async def update_user_preferences(
             user.travel_preference = request.travelPreference
         if request.dailyBudget is not None:
             user.daily_budget = request.dailyBudget
+        # 身体参数字段（Phase 4新增）
+        if request.weight is not None:
+            user.weight = request.weight
+        if request.height is not None:
+            user.height = request.height
+        if request.age is not None:
+            user.age = request.age
+        if request.gender is not None:
+            user.gender = request.gender
         
         # 保存到数据库
         db.commit()
@@ -313,7 +338,11 @@ async def update_user_preferences(
             healthGoal=user.health_goal,
             allergens=user.allergens if user.allergens else [],
             travelPreference=user.travel_preference,
-            dailyBudget=user.daily_budget
+            dailyBudget=user.daily_budget,
+            weight=user.weight,
+            height=user.height,
+            age=user.age,
+            gender=user.gender
         )
         
         return UserPreferencesResponse(
@@ -348,7 +377,11 @@ async def get_current_user_info(
         healthGoal=current_user.health_goal,
         allergens=current_user.allergens if current_user.allergens else [],
         travelPreference=current_user.travel_preference,
-        dailyBudget=current_user.daily_budget
+        dailyBudget=current_user.daily_budget,
+        weight=current_user.weight,
+        height=current_user.height,
+        age=current_user.age,
+        gender=current_user.gender
     )
     
     return UserPreferencesResponse(

@@ -675,7 +675,11 @@ GET http://localhost:8000/api/user/preferences?userId=123
     "healthGoal": "reduce_fat",
     "allergens": ["海鲜", "花生"],
     "travelPreference": "self_driving",
-    "dailyBudget": 500
+    "dailyBudget": 500,
+    "weight": 70.5,
+    "height": 175.0,
+    "age": 25,
+    "gender": "male"
   }
 }
 ```
@@ -692,6 +696,10 @@ GET http://localhost:8000/api/user/preferences?userId=123
 | data.allergens        | array\|null  | 过敏原列表，如：["海鲜", "花生"]                        |
 | data.travelPreference | string\|null | 出行偏好：self_driving/public_transport/walking         |
 | data.dailyBudget      | int\|null    | 出行日预算（元）                                        |
+| data.weight           | float\|null  | 体重（kg）                                              |
+| data.height           | float\|null  | 身高（cm）                                              |
+| data.age              | int\|null    | 年龄                                                    |
+| data.gender           | string\|null | 性别：male/female/other                                 |
 
 **错误响应**:
 - 用户不存在（HTTP 404）:
@@ -722,6 +730,10 @@ Content-Type: application/json
 | allergens        | array\|null  | 否   | 过敏原列表，如：["海鲜", "花生"]                        |
 | travelPreference | string\|null | 否   | 出行偏好：self_driving/public_transport/walking         |
 | dailyBudget      | int\|null    | 否   | 出行日预算（元），≥0                                    |
+| weight           | float\|null  | 否   | 体重（kg），>0，≤500                                    |
+| height           | float\|null  | 否   | 身高（cm），>0，≤300                                    |
+| age              | int\|null    | 否   | 年龄，>0，≤150                                          |
+| gender           | string\|null | 否   | 性别：male/female/other                                 |
 
 **请求示例**:
 ```bash
@@ -733,7 +745,11 @@ Content-Type: application/json
   "healthGoal": "reduce_fat",
   "allergens": ["海鲜", "花生"],
   "travelPreference": "self_driving",
-  "dailyBudget": 500
+  "dailyBudget": 500,
+  "weight": 70.5,
+  "height": 175.0,
+  "age": 25,
+  "gender": "male"
 }
 ```
 
@@ -748,7 +764,11 @@ Content-Type: application/json
     "healthGoal": "reduce_fat",
     "allergens": ["海鲜", "花生"],
     "travelPreference": "self_driving",
-    "dailyBudget": 500
+    "dailyBudget": 500,
+    "weight": 70.5,
+    "height": 175.0,
+    "age": 25,
+    "gender": "male"
   }
 }
 ```
