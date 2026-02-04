@@ -240,3 +240,141 @@ class ApiResponse(BaseModel):
                 "data": None
             }
         }
+
+
+# ==================== 过敏原检测相关模型 ====================
+
+class AllergenCheckRequest(BaseModel):
+    """过敏原检测请求"""
+    food_name: str = Field(..., description="菜品名称", min_length=1, max_length=100)
+    ingredients: list[str] | None = Field(None, description="配料列表（可选，提供后检测更精确）")
+    user_allergens: list[str] | None = Field(None, description="用户的过敏原列表（用于匹配告警）")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "food_name": "宫保鸡丁",
+                "ingredients": ["鸡肉", "花生", "辣椒", "葱"],
+                "user_allergens": ["花生", "鸡蛋"]
+            }
+        }
+
+
+class AllergenInfo(BaseModel):
+    """过敏原信息"""
+    code: str = Field(..., description="过敏原代码")
+    name: str = Field(..., description="过敏原中文名称")
+    name_en: str = Field(..., description="过敏原英文名称")
+    matched_keywords: list[str] = Field(..., description="匹配到的关键词")
+    confidence: str = Field(..., description="置信度：high/medium/low")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": "peanut",
+                "name": "花生",
+                "name_en": "Peanut",
+                "matched_keywords": ["花生", "宫保"],
+                "confidence": "high"
+            }
+        }
+
+
+class AllergenWarning(BaseModel):
+    """过敏原警告信息"""
+    allergen: str = Field(..., description="过敏原名称")
+    level: str = Field(..., description="警告级别：high/medium/low")
+    message: str = Field(..., description="警告消息")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "allergen": "花生",
+                "level": "high",
+                "message": "警告：检测到您的过敏原【花生】，匹配关键词：花生, 宫保"
+            }
+        }
+
+
+class AllergenCheckResponse(BaseModel):
+    """过敏原检测响应"""
+    code: int = Field(200, description="状态码，200表示成功")
+    message: str = Field("检测完成", description="消息")
+    data: dict = Field(..., description="检测结果")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "检测完成",
+                "data": {
+                    "food_name": "宫保鸡丁",
+                    "detected_allergens": [
+                        {
+                            "code": "peanut",
+                            "name": "花生",
+                            "name_en": "Peanut",
+                            "matched_keywords": ["花生", "宫保"],
+                            "confidence": "high"
+                        }
+                    ],
+                    "allergen_count": 1,
+                    "has_allergens": True,
+                    "warnings": [
+                        {
+                            "allergen": "花生",
+                            "level": "high",
+                            "message": "警告：检测到您的过敏原【花生】"
+                        }
+                    ],
+                    "has_warnings": True
+                }
+            }
+        }
+
+
+class AllergenCategoryInfo(BaseModel):
+    """过敏原类别信息"""
+    code: str = Field(..., description="过敏原代码")
+    name: str = Field(..., description="过敏原中文名称")
+    name_en: str = Field(..., description="过敏原英文名称")
+    description: str = Field(..., description="描述")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": "peanut",
+                "name": "花生",
+                "name_en": "Peanut",
+                "description": "包括花生及花生制品"
+            }
+        }
+
+
+class AllergenCategoriesResponse(BaseModel):
+    """过敏原类别列表响应"""
+    code: int = Field(200, description="状态码，200表示成功")
+    message: str = Field("获取成功", description="消息")
+    data: list[dict] = Field(..., description="过敏原类别列表")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "获取成功",
+                "data": [
+                    {
+                        "code": "milk",
+                        "name": "乳制品",
+                        "name_en": "Milk",
+                        "description": "包括牛奶及其制品"
+                    },
+                    {
+                        "code": "peanut",
+                        "name": "花生",
+                        "name_en": "Peanut",
+                        "description": "包括花生及花生制品"
+                    }
+                ]
+            }
+        }

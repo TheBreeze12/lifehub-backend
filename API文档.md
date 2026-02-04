@@ -22,6 +22,8 @@
 | **餐饮** | `/api/food/records/today`      | GET  | 获取今日饮食记录   |
 | **餐饮** | `/api/food/diet/{record_id}`   | PUT  | 更新饮食记录       |
 | **餐饮** | `/api/food/diet/{record_id}`   | DELETE | 删除饮食记录     |
+| **餐饮** | `/api/food/allergen/check`     | POST | 检测菜品过敏原     |
+| **餐饮** | `/api/food/allergen/categories`| GET  | 获取过敏原类别列表 |
 | **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
 | **用户** | `/api/user/register`           | POST | 用户注册           |
 | **用户** | `/api/user/login`              | POST | 用户登录（JWT）    |
@@ -645,6 +647,179 @@ DELETE http://localhost:8000/api/food/diet/1?userId=123
   "detail": "无权操作此记录，只能删除自己的饮食记录"
 }
 ```
+
+---
+
+### 9.3 检测菜品过敏原 ⭐
+
+**接口地址**: `POST /api/food/allergen/check`
+
+**接口描述**: 检测菜品中的过敏原，支持八大类过敏原的关键词匹配检测
+
+**八大类过敏原**:
+1. 乳制品（milk）- 牛奶及其制品
+2. 鸡蛋（egg）- 各种蛋类
+3. 鱼类（fish）- 各种鱼类
+4. 甲壳类（shellfish）- 虾、蟹、贝类等
+5. 花生（peanut）- 花生及制品
+6. 树坚果（tree_nut）- 杏仁、核桃、腰果等
+7. 小麦（wheat）- 小麦及麸质食品
+8. 大豆（soy）- 大豆及豆制品
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名         | 类型          | 必填 | 说明                               |
+| -------------- | ------------- | ---- | ---------------------------------- |
+| food_name      | string        | 是   | 菜品名称，1-100个字符              |
+| ingredients    | array\|null   | 否   | 配料列表，提供后检测更精确         |
+| user_allergens | array\|null   | 否   | 用户的过敏原列表，用于匹配告警     |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/food/allergen/check
+Content-Type: application/json
+
+{
+  "food_name": "宫保鸡丁",
+  "ingredients": ["鸡肉", "花生", "辣椒", "葱"],
+  "user_allergens": ["花生", "鸡蛋"]
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "检测完成",
+  "data": {
+    "food_name": "宫保鸡丁",
+    "detected_allergens": [
+      {
+        "code": "peanut",
+        "name": "花生",
+        "name_en": "Peanut",
+        "matched_keywords": ["花生", "宫保"],
+        "confidence": "high"
+      }
+    ],
+    "allergen_count": 1,
+    "has_allergens": true,
+    "warnings": [
+      {
+        "allergen": "花生",
+        "level": "high",
+        "message": "警告：检测到您的过敏原【花生】，匹配关键词：花生, 宫保"
+      }
+    ],
+    "has_warnings": true,
+    "ingredients": ["鸡肉", "花生", "辣椒", "葱"]
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                | 类型    | 说明                         |
+| ----------------------------------- | ------- | ---------------------------- |
+| code                                | int     | 状态码，200表示成功          |
+| message                             | string  | 响应消息                     |
+| data.food_name                      | string  | 菜品名称                     |
+| data.detected_allergens             | array   | 检测到的过敏原列表           |
+| data.detected_allergens[].code      | string  | 过敏原代码                   |
+| data.detected_allergens[].name      | string  | 过敏原中文名称               |
+| data.detected_allergens[].name_en   | string  | 过敏原英文名称               |
+| data.detected_allergens[].matched_keywords | array | 匹配到的关键词           |
+| data.detected_allergens[].confidence | string | 置信度：high/medium/low     |
+| data.allergen_count                 | int     | 检测到的过敏原数量           |
+| data.has_allergens                  | bool    | 是否包含过敏原               |
+| data.warnings                       | array   | 用户过敏原告警列表           |
+| data.has_warnings                   | bool    | 是否有告警                   |
+| data.ingredients                    | array   | 配料列表（如果提供）         |
+
+---
+
+### 9.4 获取过敏原类别列表 ⭐
+
+**接口地址**: `GET /api/food/allergen/categories`
+
+**接口描述**: 获取所有支持的过敏原类别信息
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/food/allergen/categories
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": [
+    {
+      "code": "milk",
+      "name": "乳制品",
+      "name_en": "Milk",
+      "description": "包括牛奶及其制品，如奶酪、黄油、酸奶、奶油等"
+    },
+    {
+      "code": "egg",
+      "name": "鸡蛋",
+      "name_en": "Egg",
+      "description": "包括鸡蛋、鸭蛋、鹅蛋等各种蛋类及其制品"
+    },
+    {
+      "code": "fish",
+      "name": "鱼类",
+      "name_en": "Fish",
+      "description": "包括各种鱼类及鱼制品"
+    },
+    {
+      "code": "shellfish",
+      "name": "甲壳类",
+      "name_en": "Shellfish",
+      "description": "包括虾、蟹、贝类等甲壳类海鲜"
+    },
+    {
+      "code": "peanut",
+      "name": "花生",
+      "name_en": "Peanut",
+      "description": "包括花生及花生制品"
+    },
+    {
+      "code": "tree_nut",
+      "name": "树坚果",
+      "name_en": "Tree Nuts",
+      "description": "包括杏仁、核桃、腰果、榛子等树坚果及其制品"
+    },
+    {
+      "code": "wheat",
+      "name": "小麦",
+      "name_en": "Wheat",
+      "description": "包括小麦及其制品，含麸质食品"
+    },
+    {
+      "code": "soy",
+      "name": "大豆",
+      "name_en": "Soy",
+      "description": "包括大豆及其制品，如豆腐、豆浆、酱油等"
+    }
+  ]
+}
+```
+
+**响应字段说明**:
+| 字段              | 类型   | 说明             |
+| ----------------- | ------ | ---------------- |
+| code              | int    | 状态码           |
+| message           | string | 响应消息         |
+| data              | array  | 过敏原类别列表   |
+| data[].code       | string | 过敏原代码       |
+| data[].name       | string | 过敏原中文名称   |
+| data[].name_en    | string | 过敏原英文名称   |
+| data[].description| string | 过敏原描述       |
 
 ---
 
