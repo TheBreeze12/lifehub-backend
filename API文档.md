@@ -1930,7 +1930,159 @@ curl -X POST http://localhost:8000/api/food/meal/after/1 \
 
 ---
 
+### 17. 每日热量统计 ⭐
+
+**接口地址**: `GET /api/stats/calories/daily`
+
+**接口描述**: 获取指定用户在指定日期的热量摄入和消耗统计
+
+**请求参数**:
+| 参数名 | 类型   | 必填 | 说明                     |
+| ------ | ------ | ---- | ------------------------ |
+| userId | int    | 是   | 用户ID，>0               |
+| date   | string | 是   | 统计日期（YYYY-MM-DD格式）|
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/calories/daily?userId=1&date=2026-02-04
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "date": "2026-02-04",
+    "user_id": 1,
+    "intake_calories": 1800.0,
+    "meal_count": 3,
+    "burn_calories": 500.0,
+    "exercise_count": 2,
+    "exercise_duration": 60,
+    "net_calories": 1300.0,
+    "meal_breakdown": {
+      "breakfast": 400.0,
+      "lunch": 700.0,
+      "dinner": 600.0,
+      "snack": 100.0
+    }
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                       | 类型   | 说明                                   |
+| -------------------------- | ------ | -------------------------------------- |
+| code                       | int    | 状态码，200表示成功                    |
+| message                    | string | 响应消息                               |
+| data.date                  | string | 统计日期                               |
+| data.user_id               | int    | 用户ID                                 |
+| data.intake_calories       | float  | 摄入热量（kcal，来自饮食记录）         |
+| data.meal_count            | int    | 餐次数量                               |
+| data.burn_calories         | float  | 消耗热量（kcal，来自运动计划）         |
+| data.exercise_count        | int    | 运动项目数量                           |
+| data.exercise_duration     | int    | 运动总时长（分钟）                     |
+| data.net_calories          | float  | 净热量（摄入-消耗）                    |
+| data.meal_breakdown        | object | 餐次分类统计（早餐/午餐/晚餐/加餐）    |
+
+**错误响应**:
+- 日期格式错误（HTTP 400）:
+```json
+{
+  "detail": "日期格式错误，请使用 YYYY-MM-DD 格式，收到: invalid-date"
+}
+```
+
+---
+
+### 18. 每周热量统计 ⭐
+
+**接口地址**: `GET /api/stats/calories/weekly`
+
+**接口描述**: 获取指定用户在指定周的热量摄入和消耗统计
+
+**请求参数**:
+| 参数名     | 类型   | 必填 | 说明                         |
+| ---------- | ------ | ---- | ---------------------------- |
+| userId     | int    | 是   | 用户ID，>0                   |
+| week_start | string | 是   | 周起始日期（YYYY-MM-DD格式） |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/calories/weekly?userId=1&week_start=2026-02-03
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "week_start": "2026-02-03",
+    "week_end": "2026-02-09",
+    "user_id": 1,
+    "total_intake": 12600.0,
+    "total_burn": 3500.0,
+    "total_net": 9100.0,
+    "avg_intake": 1800.0,
+    "avg_burn": 500.0,
+    "avg_net": 1300.0,
+    "total_meals": 21,
+    "total_exercises": 14,
+    "active_days": 7,
+    "daily_breakdown": [
+      {
+        "date": "2026-02-03",
+        "intake_calories": 1800.0,
+        "burn_calories": 500.0,
+        "net_calories": 1300.0
+      }
+    ]
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                              | 类型   | 说明                   |
+| --------------------------------- | ------ | ---------------------- |
+| code                              | int    | 状态码，200表示成功    |
+| message                           | string | 响应消息               |
+| data.week_start                   | string | 周起始日期             |
+| data.week_end                     | string | 周结束日期             |
+| data.user_id                      | int    | 用户ID                 |
+| data.total_intake                 | float  | 周总摄入热量（kcal）   |
+| data.total_burn                   | float  | 周总消耗热量（kcal）   |
+| data.total_net                    | float  | 周净热量               |
+| data.avg_intake                   | float  | 日均摄入热量（kcal）   |
+| data.avg_burn                     | float  | 日均消耗热量（kcal）   |
+| data.avg_net                      | float  | 日均净热量             |
+| data.total_meals                  | int    | 周总餐次               |
+| data.total_exercises              | int    | 周总运动次数           |
+| data.active_days                  | int    | 有记录的天数           |
+| data.daily_breakdown              | array  | 每日明细（7天）        |
+| data.daily_breakdown[].date       | string | 日期                   |
+| data.daily_breakdown[].intake_calories | float | 当日摄入热量      |
+| data.daily_breakdown[].burn_calories   | float | 当日消耗热量      |
+| data.daily_breakdown[].net_calories    | float | 当日净热量        |
+
+**错误响应**:
+- 日期格式错误（HTTP 400）:
+```json
+{
+  "detail": "日期格式错误，请使用 YYYY-MM-DD 格式，收到: invalid-date"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.4.0 (2026-02-04)
+- ✅ 添加每日热量统计接口 `/api/stats/calories/daily`（Phase 15）
+- ✅ 添加每周热量统计接口 `/api/stats/calories/weekly`（Phase 15）
+- ✅ 统计摄入热量（来自饮食记录）和消耗热量（来自运动计划）
+- ✅ 支持餐次分类统计和每日明细
 
 ### v1.3.0 (2026-02-04)
 - ✅ 添加餐后图片上传接口 `/api/food/meal/after/{comparison_id}`（Phase 12）
