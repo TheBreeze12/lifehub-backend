@@ -25,6 +25,7 @@
 | **餐饮** | `/api/food/allergen/check`     | POST | 检测菜品过敏原     |
 | **餐饮** | `/api/food/allergen/categories`| GET  | 获取过敏原类别列表 |
 | **餐饮** | `/api/food/meal/before`        | POST | 上传餐前图片       |
+| **餐饮** | `/api/food/meal/after/{comparison_id}` | POST | 上传餐后图片并计算净摄入 |
 | **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
 | **用户** | `/api/user/register`           | POST | 用户注册           |
 | **用户** | `/api/user/login`              | POST | 用户登录（JWT）    |
@@ -1817,7 +1818,125 @@ curl -X POST http://localhost:8000/api/food/meal/before \
 
 ---
 
+### 9.6 上传餐后图片并计算净摄入 ⭐
+
+**接口地址**: `POST /api/food/meal/after/{comparison_id}`
+
+**接口描述**: 上传餐后食物图片，AI对比餐前餐后图片，计算剩余比例和净摄入热量
+
+**Phase 12实现**: 餐后图片上传与对比计算
+
+**路径参数**:
+| 参数名        | 类型 | 必填 | 说明                           |
+| ------------- | ---- | ---- | ------------------------------ |
+| comparison_id | int  | 是   | 餐前上传时返回的对比记录ID     |
+
+**请求头**:
+```
+Content-Type: multipart/form-data
+```
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                                 |
+| ------ | ---- | ---- | ------------------------------------ |
+| image  | file | 是   | 餐后食物图片（支持jpg, jpeg, png格式）|
+
+**请求示例**:
+```bash
+curl -X POST http://localhost:8000/api/food/meal/after/1 \
+  -F "image=@after_meal.jpg"
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "餐后图片上传成功，对比完成",
+  "data": {
+    "comparison_id": 1,
+    "before_image_url": "/uploads/meal/before_1_abc123.jpg",
+    "after_image_url": "/uploads/meal/after_1_1_def456.jpg",
+    "consumption_ratio": 0.75,
+    "original_calories": 580.0,
+    "net_calories": 435.0,
+    "original_protein": 28.0,
+    "original_fat": 40.0,
+    "original_carbs": 18.0,
+    "net_protein": 21.0,
+    "net_fat": 30.0,
+    "net_carbs": 13.5,
+    "comparison_analysis": "您吃掉了约75%的食物，红烧肉剩余约1/4，蔬菜全部吃完。",
+    "status": "completed"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                     | 类型   | 说明                                    |
+| ------------------------ | ------ | --------------------------------------- |
+| code                     | int    | 状态码，200表示成功                     |
+| message                  | string | 响应消息                                |
+| data.comparison_id       | int    | 对比记录ID                              |
+| data.before_image_url    | string | 餐前图片路径                            |
+| data.after_image_url     | string | 餐后图片路径                            |
+| data.consumption_ratio   | float  | 消耗比例（0-1，1表示全部吃完）          |
+| data.original_calories   | float  | 原始估算热量（kcal）                    |
+| data.net_calories        | float  | 净摄入热量 = 原始热量 × 消耗比例        |
+| data.original_protein    | float  | 原始蛋白质（g）                         |
+| data.original_fat        | float  | 原始脂肪（g）                           |
+| data.original_carbs      | float  | 原始碳水化合物（g）                     |
+| data.net_protein         | float  | 净摄入蛋白质（g）                       |
+| data.net_fat             | float  | 净摄入脂肪（g）                         |
+| data.net_carbs           | float  | 净摄入碳水化合物（g）                   |
+| data.comparison_analysis | string | AI对比分析说明                          |
+| data.status              | string | 记录状态（completed表示对比完成）       |
+
+**计算公式**:
+- 消耗比例 = 1 - 剩余比例
+- 净摄入热量 = 原始热量 × 消耗比例
+- 净摄入蛋白质 = 原始蛋白质 × 消耗比例
+- 净摄入脂肪 = 原始脂肪 × 消耗比例
+- 净摄入碳水化合物 = 原始碳水化合物 × 消耗比例
+
+**错误响应**:
+
+*文件类型错误*（HTTP 400）:
+```json
+{
+  "detail": "请上传图片文件（支持jpg, jpeg, png格式）"
+}
+```
+
+*对比记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "对比记录不存在，comparison_id: 99999"
+}
+```
+
+*重复上传*（HTTP 400）:
+```json
+{
+  "detail": "该对比记录已完成，请勿重复上传"
+}
+```
+
+*状态异常*（HTTP 400）:
+```json
+{
+  "detail": "对比记录状态异常: pending_before"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.3.0 (2026-02-04)
+- ✅ 添加餐后图片上传接口 `/api/food/meal/after/{comparison_id}`（Phase 12）
+- ✅ 实现AI餐前餐后图片对比（Qwen-VL）
+- ✅ 计算消耗比例和净摄入热量
+- ✅ 创建meal_comparison_service处理对比逻辑
 
 ### v1.2.0 (2026-02-04)
 - ✅ 添加餐前图片上传接口 `/api/food/meal/before`（Phase 11）

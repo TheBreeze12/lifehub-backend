@@ -1628,6 +1628,223 @@ class AIService:
                 "total_estimated_carbs": 0
             }
 
+    def compare_before_after_meal(
+        self, 
+        before_image_base64: str, 
+        after_image_base64: str,
+        before_features: dict
+    ) -> dict:
+        """
+        对比餐前餐后图片，计算剩余比例
+        
+        Phase 12: 餐前餐后对比计算
+        
+        Args:
+            before_image_base64: 餐前图片base64编码
+            after_image_base64: 餐后图片base64编码
+            before_features: 餐前图片特征（包含识别的菜品和估算热量）
+            
+        Returns:
+            包含对比结果的字典：
+            {
+                "dishes": [
+                    {
+                        "name": "菜品名称",
+                        "remaining_ratio": 0.25,  # 剩余比例（0-1）
+                        "remaining_weight": 50  # 估算剩余重量（g）
+                    }
+                ],
+                "overall_remaining_ratio": 0.25,  # 整体剩余比例
+                "consumption_ratio": 0.75,  # 消耗比例 = 1 - 剩余比例
+                "comparison_analysis": "AI对比分析说明"
+            }
+        """
+        if not self.ark_client:
+            raise ValueError("豆包AI未初始化，请检查ARK_API_KEY环境变量")
+        
+        return self._compare_before_after_meal_with_ark(
+            before_image_base64, 
+            after_image_base64,
+            before_features
+        )
+    
+    def _compare_before_after_meal_with_ark(
+        self, 
+        before_image_base64: str, 
+        after_image_base64: str,
+        before_features: dict
+    ) -> dict:
+        """使用豆包AI对比餐前餐后图片"""
+        try:
+            before_data_uri = f"data:image/jpeg;base64,{before_image_base64}"
+            after_data_uri = f"data:image/jpeg;base64,{after_image_base64}"
+            
+            # 构建餐前菜品信息文本
+            before_dishes_text = ""
+            if before_features and before_features.get("dishes"):
+                dishes_info = []
+                for dish in before_features["dishes"]:
+                    name = dish.get("name", "未知菜品")
+                    weight = dish.get("estimated_weight", 0)
+                    calories = dish.get("estimated_calories", 0)
+                    dishes_info.append(f"- {name}（估算重量：{weight}g，热量：{calories}kcal）")
+                before_dishes_text = "\n".join(dishes_info)
+            
+            prompt = f"""请对比这两张图片（餐前和餐后），分析用户吃掉了多少食物，剩余了多少。
+
+餐前识别到的菜品信息：
+{before_dishes_text if before_dishes_text else "未识别到具体菜品"}
+
+要求：
+1. 对比餐前图片（第一张）和餐后图片（第二张）
+2. 估算每个菜品的剩余比例（0表示吃完，1表示没动）
+3. 计算整体剩余比例
+4. 给出简短的对比分析说明
+5. 只返回JSON，不要其他解释
+
+返回格式：
+{{
+    "dishes": [
+        {{
+            "name": "菜品名称",
+            "remaining_ratio": 剩余比例（0-1的浮点数，0表示全部吃完，1表示完全没动）,
+            "remaining_weight": 估算剩余重量（克，整数）
+        }}
+    ],
+    "overall_remaining_ratio": 整体剩余比例（0-1的浮点数）,
+    "comparison_analysis": "对比分析说明（50字以内，描述用户大约吃掉了多少）"
+}}
+
+示例（吃掉了大部分红烧肉，吃完了所有蔬菜）：
+{{
+    "dishes": [
+        {{"name": "红烧肉", "remaining_ratio": 0.25, "remaining_weight": 50}},
+        {{"name": "清炒时蔬", "remaining_ratio": 0.0, "remaining_weight": 0}}
+    ],
+    "overall_remaining_ratio": 0.15,
+    "comparison_analysis": "您吃掉了约85%的食物，红烧肉剩余约1/4，蔬菜全部吃完。"
+}}
+
+示例（几乎没吃）：
+{{
+    "dishes": [
+        {{"name": "红烧肉", "remaining_ratio": 0.9, "remaining_weight": 180}},
+        {{"name": "清炒时蔬", "remaining_ratio": 0.8, "remaining_weight": 120}}
+    ],
+    "overall_remaining_ratio": 0.85,
+    "comparison_analysis": "您只吃了约15%的食物，大部分食物还剩余在盘中。"
+}}
+
+请分析图片："""
+            
+            response = self.ark_client.responses.create(
+                model="doubao-seed-1-6-251015",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "这是餐前的食物图片："
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": before_data_uri
+                            },
+                            {
+                                "type": "input_text",
+                                "text": "这是餐后的食物图片："
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": after_data_uri
+                            },
+                            {
+                                "type": "input_text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+            
+            # 解析响应
+            content = None
+            if hasattr(response, 'output') and response.output:
+                output = response.output
+                if isinstance(output, list) and len(output) > 0:
+                    for item in output:
+                        if hasattr(item, 'content') and item.content:
+                            item_content = item.content
+                            if isinstance(item_content, list) and len(item_content) > 0:
+                                sub_item = item_content[0]
+                                if hasattr(sub_item, 'text') and sub_item.text:
+                                    content = sub_item.text
+                                    break
+            
+            if content:
+                return self._parse_comparison_result(content)
+            else:
+                raise Exception("豆包AI返回空响应")
+                
+        except Exception as e:
+            print(f"餐前餐后对比失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def _parse_comparison_result(self, content: str) -> dict:
+        """解析餐前餐后对比结果"""
+        try:
+            json_start = content.find('{')
+            json_end = content.rfind('}') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                json_str = content[json_start:json_end]
+                data = json.loads(json_str)
+                
+                # 处理菜品剩余信息
+                dishes = data.get("dishes", [])
+                processed_dishes = []
+                for dish in dishes:
+                    processed_dish = {
+                        "name": dish.get("name", "未知菜品"),
+                        "remaining_ratio": float(dish.get("remaining_ratio", 0)),
+                        "remaining_weight": int(dish.get("remaining_weight", 0))
+                    }
+                    # 确保比例在0-1范围内
+                    processed_dish["remaining_ratio"] = max(0, min(1, processed_dish["remaining_ratio"]))
+                    processed_dishes.append(processed_dish)
+                
+                overall_remaining_ratio = float(data.get("overall_remaining_ratio", 0))
+                # 确保比例在0-1范围内
+                overall_remaining_ratio = max(0, min(1, overall_remaining_ratio))
+                
+                # 计算消耗比例
+                consumption_ratio = 1 - overall_remaining_ratio
+                
+                result = {
+                    "dishes": processed_dishes,
+                    "overall_remaining_ratio": round(overall_remaining_ratio, 4),
+                    "consumption_ratio": round(consumption_ratio, 4),
+                    "comparison_analysis": data.get("comparison_analysis", "对比分析完成")
+                }
+                
+                return result
+            else:
+                raise ValueError("未找到JSON数据")
+                
+        except Exception as e:
+            print(f"解析对比结果失败: {str(e)}")
+            print(f"原始内容: {content}")
+            # 返回默认结果（假设吃掉了一半）
+            return {
+                "dishes": [],
+                "overall_remaining_ratio": 0.5,
+                "consumption_ratio": 0.5,
+                "comparison_analysis": "无法准确分析，默认估算您吃掉了约50%的食物。"
+            }
+
     def _generate_recommendation(self, nutrition_data: dict, health_goal: Optional[str] = None) -> Tuple[bool, str]:
         """
         根据营养数据和健康目标生成推荐理由
