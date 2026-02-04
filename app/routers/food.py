@@ -17,10 +17,14 @@ from app.models.food import (
     UpdateDietRecordRequest,
     DietRecordData,
     DietRecordsByDateResponse,
-    ApiResponse
+    ApiResponse,
+    AllergenCheckRequest,
+    AllergenCheckResponse,
+    AllergenCategoriesResponse
 )
 from app.db_models.diet_record import DietRecord
 from app.services.ai_service import AIService
+from app.services.allergen_service import allergen_service
 from app.database import get_db
 from app.db_models.user import User
 from app.db_models.menu_recognition import MenuRecognition
@@ -466,4 +470,71 @@ async def delete_diet_record(
 async def health_check():
     """健康检查接口"""
     return {"status": "ok", "service": "food-analysis"}
+
+
+# ==================== 过敏原检测接口 ====================
+
+@router.post("/allergen/check", response_model=AllergenCheckResponse)
+async def check_allergens(request: AllergenCheckRequest):
+    """
+    检测菜品中的过敏原
+    
+    基于关键词匹配检测八大类过敏原：
+    - 乳制品（牛奶）
+    - 鸡蛋
+    - 鱼类
+    - 甲壳类（虾、蟹等）
+    - 花生
+    - 树坚果（杏仁、核桃等）
+    - 小麦（麸质）
+    - 大豆
+    
+    - **food_name**: 菜品名称
+    - **ingredients**: 配料列表（可选，提供后检测更精确）
+    - **user_allergens**: 用户的过敏原列表（可选，用于匹配告警）
+    """
+    try:
+        # 调用过敏原检测服务
+        result = allergen_service.check_allergens(
+            food_name=request.food_name,
+            ingredients=request.ingredients,
+            user_allergens=request.user_allergens
+        )
+        
+        print(f"✓ 过敏原检测完成: {request.food_name}, 检测到 {result['allergen_count']} 种过敏原")
+        
+        return AllergenCheckResponse(
+            code=200,
+            message="检测完成",
+            data=result
+        )
+        
+    except Exception as e:
+        print(f"过敏原检测失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"检测失败: {str(e)}")
+
+
+@router.get("/allergen/categories", response_model=AllergenCategoriesResponse)
+async def get_allergen_categories():
+    """
+    获取所有过敏原类别信息
+    
+    返回八大类过敏原的详细信息，包括：
+    - 过敏原代码
+    - 中文名称
+    - 英文名称
+    - 描述
+    """
+    try:
+        categories = allergen_service.get_all_categories()
+        
+        return AllergenCategoriesResponse(
+            code=200,
+            message="获取成功",
+            data=categories
+        )
+        
+    except Exception as e:
+        print(f"获取过敏原类别失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
 

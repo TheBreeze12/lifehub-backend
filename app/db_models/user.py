@@ -1,7 +1,7 @@
 """
 用户表模型
 """
-from sqlalchemy import Column, Integer, String, JSON, TIMESTAMP, Text
+from sqlalchemy import Column, Integer, String, JSON, TIMESTAMP, Text, Float
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -21,6 +21,11 @@ class User(Base):
     allergens = Column(JSON, comment="过敏原列表，JSON格式: [\"海鲜\", \"花生\"]")
     travel_preference = Column(String(20), comment="出行偏好: self_driving/public_transport/walking")
     daily_budget = Column(Integer, comment="出行日预算（元）")
+    # 身体参数字段（Phase 4新增）
+    weight = Column(Float, comment="体重（kg）")
+    height = Column(Float, comment="身高（cm）")
+    age = Column(Integer, comment="年龄")
+    gender = Column(String(10), comment="性别: male/female/other")
     created_at = Column(TIMESTAMP, server_default=func.now(), comment="创建时间")
     updated_at = Column(
         TIMESTAMP,

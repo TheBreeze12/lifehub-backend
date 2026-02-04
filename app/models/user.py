@@ -25,6 +25,29 @@ class UserPreferencesRequest(BaseModel):
         description="出行日预算（元）", 
         ge=0
     )
+    # 身体参数字段（Phase 4新增）
+    weight: Optional[float] = Field(
+        None,
+        description="体重（kg）",
+        gt=0,
+        le=500
+    )
+    height: Optional[float] = Field(
+        None,
+        description="身高（cm）",
+        gt=0,
+        le=300
+    )
+    age: Optional[int] = Field(
+        None,
+        description="年龄",
+        gt=0,
+        le=150
+    )
+    gender: Optional[str] = Field(
+        None,
+        description="性别: male/female/other"
+    )
     
     class Config:
         json_schema_extra = {
@@ -33,7 +56,11 @@ class UserPreferencesRequest(BaseModel):
                 "healthGoal": "reduce_fat",
                 "allergens": ["海鲜", "花生"],
                 "travelPreference": "self_driving",
-                "dailyBudget": 500
+                "dailyBudget": 500,
+                "weight": 70.5,
+                "height": 175.0,
+                "age": 25,
+                "gender": "male"
             }
         }
 
@@ -46,6 +73,11 @@ class UserPreferencesData(BaseModel):
     allergens: Optional[List[str]] = Field(None, description="过敏原列表")
     travelPreference: Optional[str] = Field(None, description="出行偏好")
     dailyBudget: Optional[int] = Field(None, description="出行日预算（元）")
+    # 身体参数字段（Phase 4新增）
+    weight: Optional[float] = Field(None, description="体重（kg）")
+    height: Optional[float] = Field(None, description="身高（cm）")
+    age: Optional[int] = Field(None, description="年龄")
+    gender: Optional[str] = Field(None, description="性别: male/female/other")
     
     class Config:
         json_schema_extra = {
@@ -55,7 +87,11 @@ class UserPreferencesData(BaseModel):
                 "healthGoal": "reduce_fat",
                 "allergens": ["海鲜", "花生"],
                 "travelPreference": "self_driving",
-                "dailyBudget": 500
+                "dailyBudget": 500,
+                "weight": 70.5,
+                "height": 175.0,
+                "age": 25,
+                "gender": "male"
             }
         }
 
