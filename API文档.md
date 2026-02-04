@@ -24,6 +24,7 @@
 | **餐饮** | `/api/food/diet/{record_id}`   | DELETE | 删除饮食记录     |
 | **餐饮** | `/api/food/allergen/check`     | POST | 检测菜品过敏原     |
 | **餐饮** | `/api/food/allergen/categories`| GET  | 获取过敏原类别列表 |
+| **餐饮** | `/api/food/meal/before`        | POST | 上传餐前图片       |
 | **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
 | **用户** | `/api/user/register`           | POST | 用户注册           |
 | **用户** | `/api/user/login`              | POST | 用户登录（JWT）    |
@@ -1712,7 +1713,116 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ---
 
+### 9.5 上传餐前图片 ⭐
+
+**接口地址**: `POST /api/food/meal/before`
+
+**接口描述**: 上传餐前食物图片，AI自动识别菜品并估算份量和热量，创建对比记录
+
+**请求头**:
+```
+Content-Type: multipart/form-data
+```
+
+**请求参数**:
+| 参数名   | 类型   | 必填 | 说明                               |
+| -------- | ------ | ---- | ---------------------------------- |
+| image    | file   | 是   | 餐前食物图片（支持jpg, jpeg, png） |
+| user_id  | int    | 是   | 用户ID                             |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/food/meal/before
+Content-Type: multipart/form-data
+
+# 使用 curl
+curl -X POST http://localhost:8000/api/food/meal/before \
+  -F "image=@before_meal.jpg" \
+  -F "user_id=1"
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "餐前图片上传成功",
+  "data": {
+    "comparison_id": 1,
+    "before_image_url": "/uploads/meal/before_1_abc123.jpg",
+    "before_features": {
+      "dishes": [
+        {
+          "name": "红烧肉",
+          "estimated_weight": 200,
+          "estimated_calories": 500.0,
+          "estimated_protein": 25.0,
+          "estimated_fat": 35.0,
+          "estimated_carbs": 10.0
+        },
+        {
+          "name": "清炒时蔬",
+          "estimated_weight": 150,
+          "estimated_calories": 80.0,
+          "estimated_protein": 3.0,
+          "estimated_fat": 5.0,
+          "estimated_carbs": 8.0
+        }
+      ],
+      "total_estimated_calories": 580.0,
+      "total_estimated_protein": 28.0,
+      "total_estimated_fat": 40.0,
+      "total_estimated_carbs": 18.0
+    },
+    "status": "pending_after"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                      | 类型    | 说明                              |
+| ----------------------------------------- | ------- | --------------------------------- |
+| code                                      | int     | 状态码，200表示成功               |
+| message                                   | string  | 响应消息                          |
+| data.comparison_id                        | int     | 对比记录ID（用于后续餐后上传）    |
+| data.before_image_url                     | string  | 餐前图片保存路径                  |
+| data.before_features                      | object  | AI识别的菜品特征                  |
+| data.before_features.dishes               | array   | 识别到的菜品列表                  |
+| data.before_features.dishes[].name        | string  | 菜品名称                          |
+| data.before_features.dishes[].estimated_weight | int | 估算重量（g）                    |
+| data.before_features.dishes[].estimated_calories | float | 估算热量（kcal）              |
+| data.before_features.dishes[].estimated_protein | float | 估算蛋白质（g）               |
+| data.before_features.dishes[].estimated_fat | float | 估算脂肪（g）                   |
+| data.before_features.dishes[].estimated_carbs | float | 估算碳水化合物（g）            |
+| data.before_features.total_estimated_calories | float | 总估算热量（kcal）            |
+| data.before_features.total_estimated_protein | float | 总估算蛋白质（g）              |
+| data.before_features.total_estimated_fat  | float   | 总估算脂肪（g）                   |
+| data.before_features.total_estimated_carbs | float  | 总估算碳水化合物（g）             |
+| data.status                               | string  | 记录状态（pending_after表示等待餐后上传） |
+
+**错误响应**:
+
+*文件类型错误*（HTTP 400）:
+```json
+{
+  "detail": "请上传图片文件（支持jpg, jpeg, png格式）"
+}
+```
+
+*用户不存在*（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，user_id: 123"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.2.0 (2026-02-04)
+- ✅ 添加餐前图片上传接口 `/api/food/meal/before`（Phase 11）
+- ✅ 实现AI图片特征提取（菜品识别、份量估算、热量估算）
+- ✅ 创建MealComparison数据模型用于餐前餐后对比
 
 ### v1.1.0 (2026-02-03)
 - ✅ 实现JWT双令牌认证机制（Access Token + Refresh Token）

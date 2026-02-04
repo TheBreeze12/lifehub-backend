@@ -1425,6 +1425,209 @@ class AIService:
             return []
     
    
+    def extract_before_meal_features(self, image_base64: str) -> dict:
+        """
+        从餐前图片中提取特征信息（菜品识别、份量估算、热量估算）
+        
+        Phase 11: 餐前图片特征提取
+        
+        Args:
+            image_base64: base64编码的图片
+            
+        Returns:
+            包含菜品特征的字典：
+            {
+                "dishes": [
+                    {
+                        "name": "菜品名称",
+                        "estimated_weight": 200,  # 估算重量（g）
+                        "estimated_calories": 500,  # 估算热量（kcal）
+                        "estimated_protein": 25.0,  # 估算蛋白质（g）
+                        "estimated_fat": 30.0,  # 估算脂肪（g）
+                        "estimated_carbs": 15.0  # 估算碳水化合物（g）
+                    }
+                ],
+                "total_estimated_calories": 580,
+                "total_estimated_protein": 30.0,
+                "total_estimated_fat": 35.0,
+                "total_estimated_carbs": 20.0
+            }
+        """
+        if not self.ark_client:
+            raise ValueError("豆包AI未初始化，请检查ARK_API_KEY环境变量")
+        
+        return self._extract_before_meal_features_with_ark(image_base64)
+    
+    def _extract_before_meal_features_with_ark(self, image_base64: str) -> dict:
+        """使用豆包AI从餐前图片提取特征"""
+        try:
+            image_data_uri = f"data:image/jpeg;base64,{image_base64}"
+            
+            prompt = """请分析这张餐前食物图片，识别图片中的所有菜品，并估算每个菜品的份量和营养成分。
+
+要求：
+1. 识别图片中所有可见的菜品
+2. 根据视觉判断估算每个菜品的重量（克）
+3. 根据菜品类型和重量估算热量、蛋白质、脂肪、碳水化合物
+4. 计算所有菜品的总营养成分
+5. 只返回JSON，不要其他解释
+
+返回格式：
+{
+    "dishes": [
+        {
+            "name": "菜品名称",
+            "estimated_weight": 重量数值（克，整数）,
+            "estimated_calories": 热量数值（千卡，浮点数）,
+            "estimated_protein": 蛋白质数值（克，浮点数）,
+            "estimated_fat": 脂肪数值（克，浮点数）,
+            "estimated_carbs": 碳水化合物数值（克，浮点数）
+        }
+    ],
+    "total_estimated_calories": 总热量（千卡，浮点数）,
+    "total_estimated_protein": 总蛋白质（克，浮点数）,
+    "total_estimated_fat": 总脂肪（克，浮点数）,
+    "total_estimated_carbs": 总碳水化合物（克，浮点数）
+}
+
+示例（一份红烧肉+清炒时蔬）：
+{
+    "dishes": [
+        {
+            "name": "红烧肉",
+            "estimated_weight": 200,
+            "estimated_calories": 500.0,
+            "estimated_protein": 25.0,
+            "estimated_fat": 35.0,
+            "estimated_carbs": 10.0
+        },
+        {
+            "name": "清炒时蔬",
+            "estimated_weight": 150,
+            "estimated_calories": 80.0,
+            "estimated_protein": 3.0,
+            "estimated_fat": 5.0,
+            "estimated_carbs": 8.0
+        }
+    ],
+    "total_estimated_calories": 580.0,
+    "total_estimated_protein": 28.0,
+    "total_estimated_fat": 40.0,
+    "total_estimated_carbs": 18.0
+}
+
+如果图片不是食物图片，返回空dishes数组：
+{
+    "dishes": [],
+    "total_estimated_calories": 0,
+    "total_estimated_protein": 0,
+    "total_estimated_fat": 0,
+    "total_estimated_carbs": 0
+}
+
+请分析图片："""
+            
+            response = self.ark_client.responses.create(
+                model="doubao-seed-1-6-251015",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_image",
+                                "image_url": image_data_uri
+                            },
+                            {
+                                "type": "input_text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+            
+            # 解析响应
+            content = None
+            if hasattr(response, 'output') and response.output:
+                output = response.output
+                if isinstance(output, list) and len(output) > 0:
+                    for item in output:
+                        if hasattr(item, 'content') and item.content:
+                            item_content = item.content
+                            if isinstance(item_content, list) and len(item_content) > 0:
+                                sub_item = item_content[0]
+                                if hasattr(sub_item, 'text') and sub_item.text:
+                                    content = sub_item.text
+                                    break
+            
+            if content:
+                return self._parse_before_meal_features(content)
+            else:
+                raise Exception("豆包AI返回空响应")
+                
+        except Exception as e:
+            print(f"餐前图片特征提取失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def _parse_before_meal_features(self, content: str) -> dict:
+        """解析餐前图片特征提取结果"""
+        try:
+            json_start = content.find('{')
+            json_end = content.rfind('}') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                json_str = content[json_start:json_end]
+                data = json.loads(json_str)
+                
+                # 确保必需字段存在
+                dishes = data.get("dishes", [])
+                
+                # 处理每个菜品
+                processed_dishes = []
+                for dish in dishes:
+                    processed_dish = {
+                        "name": dish.get("name", "未知菜品"),
+                        "estimated_weight": int(dish.get("estimated_weight", 100)),
+                        "estimated_calories": float(dish.get("estimated_calories", 0)),
+                        "estimated_protein": float(dish.get("estimated_protein", 0)),
+                        "estimated_fat": float(dish.get("estimated_fat", 0)),
+                        "estimated_carbs": float(dish.get("estimated_carbs", 0))
+                    }
+                    processed_dishes.append(processed_dish)
+                
+                result = {
+                    "dishes": processed_dishes,
+                    "total_estimated_calories": float(data.get("total_estimated_calories", 0)),
+                    "total_estimated_protein": float(data.get("total_estimated_protein", 0)),
+                    "total_estimated_fat": float(data.get("total_estimated_fat", 0)),
+                    "total_estimated_carbs": float(data.get("total_estimated_carbs", 0))
+                }
+                
+                # 如果总热量为0但有菜品，重新计算
+                if result["total_estimated_calories"] == 0 and processed_dishes:
+                    result["total_estimated_calories"] = sum(d["estimated_calories"] for d in processed_dishes)
+                    result["total_estimated_protein"] = sum(d["estimated_protein"] for d in processed_dishes)
+                    result["total_estimated_fat"] = sum(d["estimated_fat"] for d in processed_dishes)
+                    result["total_estimated_carbs"] = sum(d["estimated_carbs"] for d in processed_dishes)
+                
+                return result
+            else:
+                raise ValueError("未找到JSON数据")
+                
+        except Exception as e:
+            print(f"解析餐前特征失败: {str(e)}")
+            print(f"原始内容: {content}")
+            # 返回空结果
+            return {
+                "dishes": [],
+                "total_estimated_calories": 0,
+                "total_estimated_protein": 0,
+                "total_estimated_fat": 0,
+                "total_estimated_carbs": 0
+            }
+
     def _generate_recommendation(self, nutrition_data: dict, health_goal: Optional[str] = None) -> Tuple[bool, str]:
         """
         根据营养数据和健康目标生成推荐理由
