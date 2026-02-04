@@ -14,6 +14,7 @@ from app.models.food import (
     FoodData,
     RecognizeMenuResponse,
     AddDietRecordRequest,
+    UpdateDietRecordRequest,
     DietRecordData,
     DietRecordsByDateResponse,
     ApiResponse
@@ -327,6 +328,138 @@ async def get_today_diet_records(
     except Exception as e:
         print(f"获取今日饮食记录失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@router.put("/diet/{record_id}", response_model=ApiResponse)
+async def update_diet_record(
+    record_id: int,
+    request: UpdateDietRecordRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    更新饮食记录
+    
+    - **record_id**: 记录ID
+    - **userId**: 用户ID（用于权限校验，只能更新自己的记录）
+    - **foodName**: 菜品名称（可选）
+    - **calories**: 热量（可选）
+    - **protein**: 蛋白质（可选）
+    - **fat**: 脂肪（可选）
+    - **carbs**: 碳水化合物（可选）
+    - **mealType**: 餐次（可选）
+    - **recordDate**: 记录日期（可选）
+    """
+    try:
+        # 查询记录是否存在
+        record = db.query(DietRecord).filter(DietRecord.id == record_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail=f"饮食记录不存在，record_id: {record_id}")
+        
+        # 权限校验：只能操作自己的记录
+        if record.user_id != request.userId:
+            raise HTTPException(status_code=403, detail="无权操作此记录，只能修改自己的饮食记录")
+        
+        # 更新字段（只更新非None的字段）
+        if request.foodName is not None:
+            record.food_name = request.foodName
+        if request.calories is not None:
+            record.calories = request.calories
+        if request.protein is not None:
+            record.protein = request.protein
+        if request.fat is not None:
+            record.fat = request.fat
+        if request.carbs is not None:
+            record.carbs = request.carbs
+        if request.mealType is not None:
+            # 转换餐次格式（中文转英文）
+            meal_type_map = {
+                "早餐": "breakfast",
+                "午餐": "lunch",
+                "晚餐": "dinner",
+                "加餐": "snack",
+                "breakfast": "breakfast",
+                "lunch": "lunch",
+                "dinner": "dinner",
+                "snack": "snack"
+            }
+            record.meal_type = meal_type_map.get(request.mealType, request.mealType)
+        if request.recordDate is not None:
+            try:
+                record.record_date = datetime.strptime(request.recordDate, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
+        
+        db.commit()
+        db.refresh(record)
+        
+        print(f"✓ 已更新用户 {request.userId} 的饮食记录 {record_id}: {record.food_name}")
+        
+        return ApiResponse(
+            code=200,
+            message="更新成功",
+            data={
+                "id": record.id,
+                "foodName": record.food_name,
+                "calories": record.calories,
+                "protein": record.protein or 0.0,
+                "fat": record.fat or 0.0,
+                "carbs": record.carbs or 0.0,
+                "mealType": record.meal_type or "",
+                "recordDate": record.record_date.strftime("%Y-%m-%d")
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"更新饮食记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
+
+
+@router.delete("/diet/{record_id}", response_model=ApiResponse)
+async def delete_diet_record(
+    record_id: int,
+    userId: int,
+    db: Session = Depends(get_db)
+):
+    """
+    删除饮食记录
+    
+    - **record_id**: 记录ID
+    - **userId**: 用户ID（用于权限校验，只能删除自己的记录）
+    """
+    try:
+        # 查询记录是否存在
+        record = db.query(DietRecord).filter(DietRecord.id == record_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail=f"饮食记录不存在，record_id: {record_id}")
+        
+        # 权限校验：只能操作自己的记录
+        if record.user_id != userId:
+            raise HTTPException(status_code=403, detail="无权操作此记录，只能删除自己的饮食记录")
+        
+        # 保存记录信息用于日志
+        food_name = record.food_name
+        
+        # 删除记录
+        db.delete(record)
+        db.commit()
+        
+        print(f"✓ 已删除用户 {userId} 的饮食记录 {record_id}: {food_name}")
+        
+        return ApiResponse(
+            code=200,
+            message="删除成功",
+            data=None
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"删除饮食记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
 
 @router.get("/health")
