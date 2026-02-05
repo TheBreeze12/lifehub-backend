@@ -35,6 +35,7 @@
 | **用户** | `/api/user/preferences`        | GET  | 获取用户偏好       |
 | **用户** | `/api/user/preferences`        | PUT  | 更新用户偏好       |
 | **运动** | `/api/trip/generate`           | POST | 生成运动计划       |
+| **运动** | `/api/trip/routes`             | POST | 生成帕累托最优路径 |
 | **运动** | `/api/trip/list`               | GET  | 获取运动计划列表   |
 | **运动** | `/api/trip/recent`             | GET  | 获取最近运动计划   |
 | **运动** | `/api/trip/home`               | GET  | 获取首页运动计划   |
@@ -1187,6 +1188,153 @@ Content-Type: application/json
 ```json
 {
   "detail": "请求参数错误: ..."
+}
+```
+
+---
+
+### 12.1 生成帕累托最优路径 ⭐ (Phase 22 新增)
+
+**接口地址**: `POST /api/trip/routes`
+
+**接口描述**: 基于NSGA-II多目标优化算法，生成2-3条帕累托最优运动路径。同时优化三个目标：最短时间、最大热量消耗、最佳绿化评分。
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名           | 类型   | 必填 | 说明                                                        |
+| ---------------- | ------ | ---- | ----------------------------------------------------------- |
+| start_lat        | float  | 是   | 起点纬度，范围[-90, 90]                                     |
+| start_lng        | float  | 是   | 起点经度，范围[-180, 180]                                   |
+| target_calories  | float  | 是   | 目标热量消耗（kcal），>0                                    |
+| max_time_minutes | int    | 否   | 最大运动时间（分钟），默认60，范围[1, 240]                  |
+| exercise_type    | string | 否   | 运动类型：walking/running/cycling/jogging/hiking，默认walking |
+| weight_kg        | float  | 否   | 用户体重（kg），默认70，范围(0, 500]                        |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/trip/routes
+Content-Type: application/json
+
+{
+  "start_lat": 39.9042,
+  "start_lng": 116.4074,
+  "target_calories": 300,
+  "max_time_minutes": 60,
+  "exercise_type": "walking",
+  "weight_kg": 70.0
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "帕累托最优路径生成成功",
+  "data": {
+    "routes": [
+      {
+        "route_id": 1,
+        "route_name": "最短时间",
+        "time_minutes": 25.5,
+        "calories_burn": 150.0,
+        "greenery_score": 45.0,
+        "distance_meters": 2100,
+        "waypoints": [
+          {"lat": 39.9042, "lng": 116.4074, "order": 0, "type": "start"},
+          {"lat": 39.9052, "lng": 116.4084, "order": 1, "type": "waypoint"},
+          {"lat": 39.9062, "lng": 116.4074, "order": 2, "type": "waypoint"},
+          {"lat": 39.9042, "lng": 116.4074, "order": 3, "type": "end"}
+        ],
+        "exercise_type": "walking",
+        "intensity": 0.85
+      },
+      {
+        "route_id": 2,
+        "route_name": "最大消耗",
+        "time_minutes": 55.0,
+        "calories_burn": 280.0,
+        "greenery_score": 60.0,
+        "distance_meters": 4500,
+        "waypoints": [...],
+        "exercise_type": "walking",
+        "intensity": 0.9
+      },
+      {
+        "route_id": 3,
+        "route_name": "最佳绿化",
+        "time_minutes": 45.0,
+        "calories_burn": 200.0,
+        "greenery_score": 85.0,
+        "distance_meters": 3800,
+        "waypoints": [...],
+        "exercise_type": "walking",
+        "intensity": 0.7
+      }
+    ],
+    "start_point": {"lat": 39.9042, "lng": 116.4074, "order": 0, "type": "start"},
+    "target_calories": 300,
+    "max_time_minutes": 60,
+    "exercise_type": "walking",
+    "weight_kg": 70.0,
+    "n_routes": 3
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                          | 类型   | 说明                                           |
+| ----------------------------- | ------ | ---------------------------------------------- |
+| code                          | int    | 状态码，200表示成功                            |
+| message                       | string | 响应消息                                       |
+| data                          | object | 路径数据                                       |
+| data.routes                   | array  | 帕累托最优路径列表（2-3条）                    |
+| data.routes[].route_id        | int    | 路径ID                                         |
+| data.routes[].route_name      | string | 路径名称（最短时间/最大消耗/最佳绿化）         |
+| data.routes[].time_minutes    | float  | 预计时间（分钟）                               |
+| data.routes[].calories_burn   | float  | 热量消耗（kcal）                               |
+| data.routes[].greenery_score  | float  | 绿化评分（0-100）                              |
+| data.routes[].distance_meters | float  | 距离（米）                                     |
+| data.routes[].waypoints       | array  | 路径点列表                                     |
+| data.routes[].waypoints[].lat | float  | 路径点纬度                                     |
+| data.routes[].waypoints[].lng | float  | 路径点经度                                     |
+| data.routes[].waypoints[].order | int  | 路径点顺序                                     |
+| data.routes[].waypoints[].type | string | 路径点类型：start/waypoint/end                |
+| data.routes[].exercise_type   | string | 运动类型                                       |
+| data.routes[].intensity       | float  | 运动强度（0-1）                                |
+| data.start_point              | object | 起点坐标                                       |
+| data.target_calories          | float  | 目标热量消耗                                   |
+| data.max_time_minutes         | int    | 最大运动时间                                   |
+| data.exercise_type            | string | 运动类型                                       |
+| data.weight_kg                | float  | 用户体重                                       |
+| data.n_routes                 | int    | 返回的路径数量                                 |
+
+**错误响应**:
+- 请求参数错误（HTTP 422）:
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "target_calories"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+- 坐标无效（HTTP 422）:
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "start_lat"],
+      "msg": "ensure this value is less than or equal to 90",
+      "type": "value_error.number.not_le"
+    }
+  ]
 }
 ```
 

@@ -12,7 +12,12 @@ from app.models.trip import (
     TripItemData,
     TripListResponse,
     TripSummary,
-    TripDetailResponse
+    TripDetailResponse,
+    GenerateRoutesRequest,
+    GenerateRoutesResponse,
+    RoutesResponseData,
+    ParetoRoute,
+    RouteWaypoint
 )
 from app.database import get_db
 from app.db_models.trip_plan import TripPlan
@@ -20,6 +25,7 @@ from app.db_models.trip_item import TripItem
 from app.db_models.user import User
 from app.services.ai_service import AIService
 from app.services.mets_service import METsService
+from app.services.route_optimization_service import get_route_optimization_service
 
 router = APIRouter(prefix="/api/trip", tags=["运动规划"])
 
@@ -406,3 +412,90 @@ async def get_trip_detail(
         print(f"获取行程详情失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取行程详情失败: {str(e)}")
 
+
+# ==================== Phase 22: 帕累托最优路径生成接口 ====================
+
+@router.post("/routes", response_model=GenerateRoutesResponse)
+async def generate_pareto_routes(
+    request: GenerateRoutesRequest
+):
+    """
+    生成帕累托最优运动路径（2-3条）
+    
+    基于NSGA-II多目标优化算法，同时优化：
+    - 最短时间
+    - 最大热量消耗
+    - 最佳绿化评分
+    
+    - **start_lat**: 起点纬度
+    - **start_lng**: 起点经度
+    - **target_calories**: 目标热量消耗（kcal）
+    - **max_time_minutes**: 最大运动时间（分钟，默认60）
+    - **exercise_type**: 运动类型（walking/running/cycling/jogging/hiking）
+    - **weight_kg**: 用户体重（kg，默认70）
+    """
+    try:
+        # 获取路径优化服务
+        route_service = get_route_optimization_service()
+        
+        # 生成帕累托最优路径
+        result = route_service.generate_pareto_routes(
+            start_point=(request.start_lat, request.start_lng),
+            target_calories=request.target_calories,
+            max_time_minutes=request.max_time_minutes or 60,
+            exercise_type=request.exercise_type or 'walking',
+            weight_kg=request.weight_kg or 70.0
+        )
+        
+        # 转换路径数据为Pydantic模型
+        routes_data = []
+        for route in result.get('routes', []):
+            # 转换路径点
+            waypoints = []
+            for wp in route.get('waypoints', []):
+                waypoints.append(RouteWaypoint(
+                    lat=wp['lat'],
+                    lng=wp['lng'],
+                    order=wp.get('order', 0),
+                    type=wp.get('type', 'waypoint')
+                ))
+            
+            routes_data.append(ParetoRoute(
+                route_id=route['route_id'],
+                route_name=route['route_name'],
+                time_minutes=route['time_minutes'],
+                calories_burn=route['calories_burn'],
+                greenery_score=min(route['greenery_score'], 100),  # 确保不超过100
+                distance_meters=route['distance_meters'],
+                waypoints=waypoints,
+                exercise_type=route.get('exercise_type'),
+                intensity=route.get('intensity')
+            ))
+        
+        # 构建响应数据
+        response_data = RoutesResponseData(
+            routes=routes_data,
+            start_point=RouteWaypoint(
+                lat=request.start_lat,
+                lng=request.start_lng,
+                order=0,
+                type='start'
+            ),
+            target_calories=request.target_calories,
+            max_time_minutes=request.max_time_minutes or 60,
+            exercise_type=request.exercise_type or 'walking',
+            weight_kg=request.weight_kg or 70.0,
+            n_routes=len(routes_data)
+        )
+        
+        return GenerateRoutesResponse(
+            code=200,
+            message="帕累托最优路径生成成功",
+            data=response_data
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"请求参数错误: {str(e)}")
+    except Exception as e:
+        print(f"生成帕累托路径失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"生成帕累托路径失败: {str(e)}")

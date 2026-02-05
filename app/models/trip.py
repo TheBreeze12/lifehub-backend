@@ -187,3 +187,125 @@ class TripDetailResponse(BaseModel):
             }
         }
 
+
+# ==================== Phase 22: 帕累托最优路径模型 ====================
+
+class RouteWaypoint(BaseModel):
+    """路径点"""
+    lat: float = Field(..., description="纬度", ge=-90, le=90)
+    lng: float = Field(..., description="经度", ge=-180, le=180)
+    order: int = Field(0, description="顺序")
+    type: str = Field("waypoint", description="类型: start/waypoint/end")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "lat": 39.9042,
+                "lng": 116.4074,
+                "order": 0,
+                "type": "start"
+            }
+        }
+
+
+class ParetoRoute(BaseModel):
+    """帕累托最优路径"""
+    route_id: int = Field(..., description="路径ID")
+    route_name: str = Field(..., description="路径名称（如：最短时间、最大消耗、最佳绿化）")
+    time_minutes: float = Field(..., description="预计时间（分钟）", ge=0)
+    calories_burn: float = Field(..., description="热量消耗（kcal）", ge=0)
+    greenery_score: float = Field(..., description="绿化评分（0-100）", ge=0, le=100)
+    distance_meters: float = Field(..., description="距离（米）", ge=0)
+    waypoints: List[RouteWaypoint] = Field(default_factory=list, description="路径点列表")
+    exercise_type: Optional[str] = Field(None, description="运动类型")
+    intensity: Optional[float] = Field(None, description="运动强度（0-1）", ge=0, le=1)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "route_id": 1,
+                "route_name": "最短时间",
+                "time_minutes": 25.5,
+                "calories_burn": 150.0,
+                "greenery_score": 45.0,
+                "distance_meters": 2100,
+                "waypoints": [
+                    {"lat": 39.9042, "lng": 116.4074, "order": 0, "type": "start"},
+                    {"lat": 39.9052, "lng": 116.4084, "order": 1, "type": "waypoint"},
+                    {"lat": 39.9042, "lng": 116.4074, "order": 2, "type": "end"}
+                ],
+                "exercise_type": "walking",
+                "intensity": 0.8
+            }
+        }
+
+
+class GenerateRoutesRequest(BaseModel):
+    """生成帕累托路径请求"""
+    start_lat: float = Field(..., description="起点纬度", ge=-90, le=90)
+    start_lng: float = Field(..., description="起点经度", ge=-180, le=180)
+    target_calories: float = Field(..., description="目标热量消耗（kcal）", gt=0)
+    max_time_minutes: Optional[int] = Field(60, description="最大运动时间（分钟）", gt=0, le=240)
+    exercise_type: Optional[str] = Field("walking", description="运动类型: walking/running/cycling/jogging/hiking")
+    weight_kg: Optional[float] = Field(70.0, description="用户体重（kg）", gt=0, le=500)
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "start_lat": 39.9042,
+                "start_lng": 116.4074,
+                "target_calories": 300,
+                "max_time_minutes": 60,
+                "exercise_type": "walking",
+                "weight_kg": 70.0
+            }
+        }
+
+
+class RoutesResponseData(BaseModel):
+    """路径响应数据"""
+    routes: List[ParetoRoute] = Field(default_factory=list, description="帕累托最优路径列表（2-3条）")
+    start_point: RouteWaypoint = Field(..., description="起点坐标")
+    target_calories: float = Field(..., description="目标热量消耗")
+    max_time_minutes: int = Field(..., description="最大运动时间")
+    exercise_type: str = Field(..., description="运动类型")
+    weight_kg: float = Field(..., description="用户体重")
+    n_routes: int = Field(..., description="返回的路径数量")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "routes": [],
+                "start_point": {"lat": 39.9042, "lng": 116.4074, "order": 0, "type": "start"},
+                "target_calories": 300,
+                "max_time_minutes": 60,
+                "exercise_type": "walking",
+                "weight_kg": 70.0,
+                "n_routes": 3
+            }
+        }
+
+
+class GenerateRoutesResponse(BaseModel):
+    """生成帕累托路径响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    data: Optional[RoutesResponseData] = Field(None, description="路径数据")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "路径生成成功",
+                "data": {
+                    "routes": [],
+                    "start_point": {"lat": 39.9042, "lng": 116.4074, "order": 0, "type": "start"},
+                    "target_calories": 300,
+                    "max_time_minutes": 60,
+                    "exercise_type": "walking",
+                    "weight_kg": 70.0,
+                    "n_routes": 3
+                }
+            }
+        }
+
