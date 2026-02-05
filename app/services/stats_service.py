@@ -1,11 +1,14 @@
 """
 统计服务
 Phase 15: 热量收支统计
+Phase 16: 营养素摄入统计
 
 提供每日/每周热量统计功能：
 - 统计饮食记录的摄入热量
 - 统计运动计划的消耗热量
 - 计算净热量（摄入-消耗）
+- 统计营养素（蛋白质、脂肪、碳水）摄入比例
+- 与膳食指南建议值对比
 """
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
@@ -15,7 +18,11 @@ from typing import Optional
 from app.db_models.diet_record import DietRecord
 from app.db_models.trip_plan import TripPlan
 from app.db_models.trip_item import TripItem
-from app.models.stats import DailyCalorieStats, WeeklyCalorieStats, DailyBreakdown
+from app.models.stats import (
+    DailyCalorieStats, WeeklyCalorieStats, DailyBreakdown,
+    DailyNutrientStats, NutrientComparison, GuidelinesComparison,
+    DIETARY_GUIDELINES, PROTEIN_KCAL_PER_GRAM, FAT_KCAL_PER_GRAM, CARBS_KCAL_PER_GRAM
+)
 
 
 class StatsService:
@@ -190,6 +197,197 @@ class StatsService:
             total_exercises=total_exercises,
             active_days=active_days,
             daily_breakdown=daily_breakdown
+        )
+
+
+    # ============== Phase 16: 营养素统计方法 ==============
+    
+    def _create_nutrient_comparison(
+        self, 
+        nutrient_key: str, 
+        actual_ratio: float
+    ) -> NutrientComparison:
+        """
+        创建营养素与膳食指南对比结果
+        
+        Args:
+            nutrient_key: 营养素键名（protein/fat/carbs）
+            actual_ratio: 实际占比（%）
+            
+        Returns:
+            NutrientComparison: 对比结果
+        """
+        guideline = DIETARY_GUIDELINES[nutrient_key]
+        min_val = guideline["min"]
+        max_val = guideline["max"]
+        name = guideline["name"]
+        
+        # 判断状态
+        if actual_ratio < min_val:
+            status = "low"
+            message = f"{name}摄入偏低，建议适当增加{name}摄入"
+        elif actual_ratio > max_val:
+            status = "high"
+            message = f"{name}摄入偏高，建议控制{name}摄入"
+        else:
+            status = "normal"
+            message = f"{name}摄入在建议范围内"
+        
+        return NutrientComparison(
+            actual_ratio=round(actual_ratio, 1),
+            recommended_min=min_val,
+            recommended_max=max_val,
+            status=status,
+            message=message
+        )
+    
+    def get_daily_nutrient_stats(
+        self,
+        db: Session,
+        user_id: int,
+        target_date: date
+    ) -> DailyNutrientStats:
+        """
+        获取指定日期的营养素统计
+        
+        统计蛋白质、脂肪、碳水化合物的摄入量和占比，
+        并与《中国居民膳食指南2022》建议值对比。
+        
+        Args:
+            db: 数据库会话
+            user_id: 用户ID
+            target_date: 目标日期
+            
+        Returns:
+            DailyNutrientStats: 每日营养素统计数据
+        """
+        # 查询饮食记录
+        diet_records = db.query(DietRecord).filter(
+            and_(
+                DietRecord.user_id == user_id,
+                DietRecord.record_date == target_date
+            )
+        ).all()
+        
+        # 初始化统计变量
+        total_protein = 0.0
+        total_fat = 0.0
+        total_carbs = 0.0
+        total_calories = 0.0
+        meal_count = len(diet_records)
+        
+        # 餐次分类统计
+        meal_breakdown = {
+            "breakfast": {"protein": 0.0, "fat": 0.0, "carbs": 0.0, "calories": 0.0},
+            "lunch": {"protein": 0.0, "fat": 0.0, "carbs": 0.0, "calories": 0.0},
+            "dinner": {"protein": 0.0, "fat": 0.0, "carbs": 0.0, "calories": 0.0},
+            "snack": {"protein": 0.0, "fat": 0.0, "carbs": 0.0, "calories": 0.0}
+        }
+        
+        # 餐次名称映射
+        meal_type_map = {
+            "早餐": "breakfast",
+            "午餐": "lunch",
+            "晚餐": "dinner",
+            "加餐": "snack"
+        }
+        
+        # 遍历记录，累加营养素
+        for record in diet_records:
+            protein = record.protein or 0.0
+            fat = record.fat or 0.0
+            carbs = record.carbs or 0.0
+            calories = record.calories or 0.0
+            
+            total_protein += protein
+            total_fat += fat
+            total_carbs += carbs
+            total_calories += calories
+            
+            # 餐次分类
+            meal_type = (record.meal_type or "").lower()
+            if meal_type in meal_type_map:
+                meal_type = meal_type_map[meal_type]
+            
+            if meal_type in meal_breakdown:
+                meal_breakdown[meal_type]["protein"] += protein
+                meal_breakdown[meal_type]["fat"] += fat
+                meal_breakdown[meal_type]["carbs"] += carbs
+                meal_breakdown[meal_type]["calories"] += calories
+        
+        # 计算各营养素提供的热量
+        protein_calories = total_protein * PROTEIN_KCAL_PER_GRAM
+        fat_calories = total_fat * FAT_KCAL_PER_GRAM
+        carbs_calories = total_carbs * CARBS_KCAL_PER_GRAM
+        
+        # 计算营养素热量总和（用于计算占比）
+        total_nutrient_calories = protein_calories + fat_calories + carbs_calories
+        
+        # 计算营养素占比
+        if total_nutrient_calories > 0:
+            protein_ratio = (protein_calories / total_nutrient_calories) * 100
+            fat_ratio = (fat_calories / total_nutrient_calories) * 100
+            carbs_ratio = (carbs_calories / total_nutrient_calories) * 100
+        else:
+            protein_ratio = 0.0
+            fat_ratio = 0.0
+            carbs_ratio = 0.0
+        
+        # 创建膳食指南对比
+        if total_nutrient_calories > 0:
+            guidelines_comparison = GuidelinesComparison(
+                protein=self._create_nutrient_comparison("protein", protein_ratio),
+                fat=self._create_nutrient_comparison("fat", fat_ratio),
+                carbs=self._create_nutrient_comparison("carbs", carbs_ratio)
+            )
+        else:
+            # 无数据时也返回对比结构，但状态为low
+            guidelines_comparison = GuidelinesComparison(
+                protein=NutrientComparison(
+                    actual_ratio=0.0,
+                    recommended_min=DIETARY_GUIDELINES["protein"]["min"],
+                    recommended_max=DIETARY_GUIDELINES["protein"]["max"],
+                    status="low",
+                    message="暂无数据"
+                ),
+                fat=NutrientComparison(
+                    actual_ratio=0.0,
+                    recommended_min=DIETARY_GUIDELINES["fat"]["min"],
+                    recommended_max=DIETARY_GUIDELINES["fat"]["max"],
+                    status="low",
+                    message="暂无数据"
+                ),
+                carbs=NutrientComparison(
+                    actual_ratio=0.0,
+                    recommended_min=DIETARY_GUIDELINES["carbs"]["min"],
+                    recommended_max=DIETARY_GUIDELINES["carbs"]["max"],
+                    status="low",
+                    message="暂无数据"
+                )
+            )
+        
+        # 清理meal_breakdown中的空餐次
+        cleaned_meal_breakdown = {
+            k: v for k, v in meal_breakdown.items()
+            if v["calories"] > 0
+        }
+        
+        return DailyNutrientStats(
+            date=target_date.isoformat(),
+            user_id=user_id,
+            total_protein=round(total_protein, 2),
+            total_fat=round(total_fat, 2),
+            total_carbs=round(total_carbs, 2),
+            total_calories=round(total_calories, 2),
+            protein_calories=round(protein_calories, 2),
+            fat_calories=round(fat_calories, 2),
+            carbs_calories=round(carbs_calories, 2),
+            protein_ratio=round(protein_ratio, 1),
+            fat_ratio=round(fat_ratio, 1),
+            carbs_ratio=round(carbs_ratio, 1),
+            meal_count=meal_count,
+            meal_breakdown=cleaned_meal_breakdown if cleaned_meal_breakdown else None,
+            guidelines_comparison=guidelines_comparison
         )
 
 

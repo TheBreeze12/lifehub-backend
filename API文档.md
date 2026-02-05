@@ -2076,7 +2076,121 @@ GET http://localhost:8000/api/stats/calories/weekly?userId=1&week_start=2026-02-
 
 ---
 
+### 19. 每日营养素统计 ⭐
+
+**接口地址**: `GET /api/stats/nutrients/daily`
+
+**接口描述**: 获取指定用户在指定日期的营养素摄入统计，包括蛋白质、脂肪、碳水化合物的摄入量和占比，以及与《中国居民膳食指南2022》建议值的对比
+
+**请求参数**:
+| 参数名 | 类型   | 必填 | 说明                       |
+| ------ | ------ | ---- | -------------------------- |
+| userId | int    | 是   | 用户ID，>0                 |
+| date   | string | 是   | 统计日期（YYYY-MM-DD格式） |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/nutrients/daily?userId=1&date=2026-02-05
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "date": "2026-02-05",
+    "user_id": 1,
+    "total_protein": 75.0,
+    "total_fat": 60.0,
+    "total_carbs": 280.0,
+    "total_calories": 1960.0,
+    "protein_calories": 300.0,
+    "fat_calories": 540.0,
+    "carbs_calories": 1120.0,
+    "protein_ratio": 15.3,
+    "fat_ratio": 27.6,
+    "carbs_ratio": 57.1,
+    "meal_count": 3,
+    "meal_breakdown": {
+      "breakfast": {"protein": 20.0, "fat": 15.0, "carbs": 60.0, "calories": 455.0},
+      "lunch": {"protein": 35.0, "fat": 30.0, "carbs": 120.0, "calories": 890.0},
+      "dinner": {"protein": 20.0, "fat": 15.0, "carbs": 100.0, "calories": 615.0}
+    },
+    "guidelines_comparison": {
+      "protein": {
+        "actual_ratio": 15.3,
+        "recommended_min": 10,
+        "recommended_max": 15,
+        "status": "normal",
+        "message": "蛋白质摄入在建议范围内"
+      },
+      "fat": {
+        "actual_ratio": 27.6,
+        "recommended_min": 20,
+        "recommended_max": 30,
+        "status": "normal",
+        "message": "脂肪摄入在建议范围内"
+      },
+      "carbs": {
+        "actual_ratio": 57.1,
+        "recommended_min": 50,
+        "recommended_max": 65,
+        "status": "normal",
+        "message": "碳水化合物摄入在建议范围内"
+      }
+    }
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                    | 类型   | 说明                                     |
+| --------------------------------------- | ------ | ---------------------------------------- |
+| code                                    | int    | 状态码，200表示成功                      |
+| message                                 | string | 响应消息                                 |
+| data.date                               | string | 统计日期                                 |
+| data.user_id                            | int    | 用户ID                                   |
+| data.total_protein                      | float  | 蛋白质总量（g）                          |
+| data.total_fat                          | float  | 脂肪总量（g）                            |
+| data.total_carbs                        | float  | 碳水化合物总量（g）                      |
+| data.total_calories                     | float  | 总热量（kcal）                           |
+| data.protein_calories                   | float  | 蛋白质提供的热量（kcal）                 |
+| data.fat_calories                       | float  | 脂肪提供的热量（kcal）                   |
+| data.carbs_calories                     | float  | 碳水化合物提供的热量（kcal）             |
+| data.protein_ratio                      | float  | 蛋白质热量占比（%）                      |
+| data.fat_ratio                          | float  | 脂肪热量占比（%）                        |
+| data.carbs_ratio                        | float  | 碳水化合物热量占比（%）                  |
+| data.meal_count                         | int    | 餐次数量                                 |
+| data.meal_breakdown                     | object | 按餐次的营养素分类统计                   |
+| data.guidelines_comparison              | object | 与膳食指南对比结果                       |
+| data.guidelines_comparison.*.status     | string | 状态：low（偏低）/normal（正常）/high（偏高） |
+| data.guidelines_comparison.*.message    | string | 对比说明                                 |
+
+**膳食指南建议值（中国居民膳食指南2022）**:
+| 营养素   | 建议占比 |
+| -------- | -------- |
+| 蛋白质   | 10-15%   |
+| 脂肪     | 20-30%   |
+| 碳水化合物 | 50-65% |
+
+**错误响应**:
+- 日期格式错误（HTTP 400）:
+```json
+{
+  "detail": "日期格式错误，请使用 YYYY-MM-DD 格式，收到: invalid-date"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.5.0 (2026-02-05)
+- ✅ 添加每日营养素统计接口 `/api/stats/nutrients/daily`（Phase 16）
+- ✅ 统计蛋白质、脂肪、碳水化合物摄入量和占比
+- ✅ 与《中国居民膳食指南2022》建议值对比
+- ✅ 支持按餐次分类统计营养素
 
 ### v1.4.0 (2026-02-04)
 - ✅ 添加每日热量统计接口 `/api/stats/calories/daily`（Phase 15）

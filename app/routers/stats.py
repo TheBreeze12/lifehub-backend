@@ -1,10 +1,12 @@
 """
 统计相关API路由
 Phase 15: 热量收支统计
+Phase 16: 营养素摄入统计
 
 提供每日/每周热量统计接口：
 - GET /api/stats/calories/daily - 每日热量统计
 - GET /api/stats/calories/weekly - 每周热量统计
+- GET /api/stats/nutrients/daily - 每日营养素统计（Phase 16）
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
@@ -14,7 +16,9 @@ from app.database import get_db
 from app.services.stats_service import stats_service
 from app.models.stats import (
     DailyCalorieStatsResponse,
-    WeeklyCalorieStatsResponse
+    WeeklyCalorieStatsResponse,
+    DailyNutrientStatsResponse,
+    DailyNutrientStats
 )
 from app.db_models.user import User
 
@@ -187,3 +191,102 @@ async def stats_health_check():
         "status": "ok",
         "service": "calorie-stats"
     }
+
+
+# ============== Phase 16: 营养素统计接口 ==============
+
+@router.get("/nutrients/daily", response_model=DailyNutrientStatsResponse)
+async def get_daily_nutrient_stats(
+    userId: int = Query(..., description="用户ID", gt=0),
+    date: str = Query(..., description="统计日期（YYYY-MM-DD格式）"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取每日营养素统计（Phase 16）
+    
+    统计指定用户在指定日期的营养素摄入情况：
+    - **total_protein**: 蛋白质总量（g）
+    - **total_fat**: 脂肪总量（g）
+    - **total_carbs**: 碳水化合物总量（g）
+    - **total_calories**: 总热量（kcal）
+    - **protein_ratio**: 蛋白质热量占比（%）
+    - **fat_ratio**: 脂肪热量占比（%）
+    - **carbs_ratio**: 碳水化合物热量占比（%）
+    - **guidelines_comparison**: 与《中国居民膳食指南2022》对比结果
+    
+    膳食指南建议占比：
+    - 蛋白质: 10-15%
+    - 脂肪: 20-30%
+    - 碳水化合物: 50-65%
+    
+    Args:
+        userId: 用户ID
+        date: 统计日期（YYYY-MM-DD格式）
+        
+    Returns:
+        DailyNutrientStatsResponse: 每日营养素统计响应
+    """
+    # 解析日期
+    target_date = parse_date(date)
+    
+    # 验证用户是否存在
+    user = db.query(User).filter(User.id == userId).first()
+    if not user:
+        # 返回空统计而非404，便于前端处理
+        from app.models.stats import (
+            GuidelinesComparison, NutrientComparison, DIETARY_GUIDELINES
+        )
+        empty_comparison = GuidelinesComparison(
+            protein=NutrientComparison(
+                actual_ratio=0.0,
+                recommended_min=DIETARY_GUIDELINES["protein"]["min"],
+                recommended_max=DIETARY_GUIDELINES["protein"]["max"],
+                status="low",
+                message="暂无数据"
+            ),
+            fat=NutrientComparison(
+                actual_ratio=0.0,
+                recommended_min=DIETARY_GUIDELINES["fat"]["min"],
+                recommended_max=DIETARY_GUIDELINES["fat"]["max"],
+                status="low",
+                message="暂无数据"
+            ),
+            carbs=NutrientComparison(
+                actual_ratio=0.0,
+                recommended_min=DIETARY_GUIDELINES["carbs"]["min"],
+                recommended_max=DIETARY_GUIDELINES["carbs"]["max"],
+                status="low",
+                message="暂无数据"
+            )
+        )
+        empty_stats = DailyNutrientStats(
+            date=date,
+            user_id=userId,
+            total_protein=0.0,
+            total_fat=0.0,
+            total_carbs=0.0,
+            total_calories=0.0,
+            protein_calories=0.0,
+            fat_calories=0.0,
+            carbs_calories=0.0,
+            protein_ratio=0.0,
+            fat_ratio=0.0,
+            carbs_ratio=0.0,
+            meal_count=0,
+            meal_breakdown=None,
+            guidelines_comparison=empty_comparison
+        )
+        return DailyNutrientStatsResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_stats
+        )
+    
+    # 获取统计数据
+    stats = stats_service.get_daily_nutrient_stats(db, userId, target_date)
+    
+    return DailyNutrientStatsResponse(
+        code=200,
+        message="获取成功",
+        data=stats
+    )
