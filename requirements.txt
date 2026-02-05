@@ -13,4 +13,6 @@ cryptography==42.0.0
 geopy==2.4.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+pymoo==0.6.1.1
+numpy>=1.21.0
 
