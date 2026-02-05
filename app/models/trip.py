@@ -40,18 +40,23 @@ class TripItemData(BaseModel):
     placeName: str = Field(..., description="地点名称")
     placeType: Optional[str] = Field(None, description="类型: walking/running/cycling/park/gym/indoor/outdoor (运动类型) 或 attraction/dining/transport/accommodation (兼容旧数据)")
     duration: Optional[int] = Field(None, description="预计时长（分钟）")
-    cost: Optional[float] = Field(None, description="预计消耗卡路里（kcal），原为费用字段，现语义转换为卡路里")
-    notes: Optional[str] = Field(None, description="备注")
+    cost: Optional[float] = Field(None, description="预计消耗卡路里（kcal），基于METs公式精准计算")
+    notes: Optional[str] = Field(None, description="备注（包含METs计算依据）")
+    metsValue: Optional[float] = Field(None, description="METs值（Phase 19新增）")
+    calculationBasis: Optional[str] = Field(None, description="热量计算依据（Phase 19新增）")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "dayIndex": 1,
-                "startTime": "09:00",
-                "placeName": "西湖风景区",
-                "placeType": "attraction",
-                "duration": 180,
-                "notes": "建议游玩3小时"
+                "startTime": "19:00",
+                "placeName": "北京中央公园",
+                "placeType": "walking",
+                "duration": 30,
+                "cost": 122.5,
+                "notes": "餐后散步，建议慢走",
+                "metsValue": 3.5,
+                "calculationBasis": "METs=3.5 × 70kg × 0.5h"
             }
         }
 

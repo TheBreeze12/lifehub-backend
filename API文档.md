@@ -1086,11 +1086,11 @@ GET http://localhost:8000/api/user/data?nickname=健康达人&password=securepas
 
 ---
 
-### 12. 生成运动计划 ⭐
+### 12. 生成运动计划 
 
 **接口地址**: `POST /api/trip/generate`
 
-**接口描述**: 根据用户查询与偏好，AI生成餐后运动计划（基于“餐后30–60分钟”原则，地点为具体可运动的场所）。
+**接口描述**: 根据用户查询与偏好，AI生成餐后运动计划（基于"餐后30–60分钟"原则，地点为具体可运动的场所）。热量消耗基于METs公式精准计算：`消耗(kcal) = METs × 体重(kg) × 时间(h)`（Phase 19新增）。
 
 **请求头**:
 ```
@@ -1139,8 +1139,10 @@ Content-Type: application/json
         "placeName": "北京中央公园健身步道",
         "placeType": "walking",
         "duration": 30,
-        "cost": 150,
-        "notes": "餐后散步，建议慢走，注意补水"
+        "cost": 122.5,
+        "notes": "餐后散步，建议慢走，注意补水",
+        "metsValue": 3.5,
+        "calculationBasis": "METs=3.5 × 70kg × 0.50h"
       },
       {
         "dayIndex": 1,
@@ -1148,33 +1150,37 @@ Content-Type: application/json
         "placeName": "北京滨江健身步道",
         "placeType": "running",
         "duration": 20,
-        "cost": 160,
-        "notes": "轻慢跑，控制强度，避免过饱运动"
-      },
+        "cost": 186.7,
+        "notes": "轻慢跑，控制强度，避免过饱运动",
+        "metsValue": 8.0,
+        "calculationBasis": "METs=8.0 × 70kg × 0.33h"
+      }
     ]
   }
 }
 ```
 
 **响应字段说明**:
-| 字段                   | 类型         | 说明                                                               |
-| ---------------------- | ------------ | ------------------------------------------------------------------ |
-| code                   | int          | 状态码，200表示成功                                                |
-| message                | string       | 响应消息                                                           |
-| data                   | object       | 运动计划数据                                                       |
-| data.tripId            | int          | 计划ID                                                             |
-| data.title             | string       | 计划标题                                                           |
-| data.destination       | string\|null | 运动区域/起点（具体地点）                                          |
-| data.startDate         | string       | 开始日期（YYYY-MM-DD）                                             |
-| data.endDate           | string       | 结束日期（YYYY-MM-DD）                                             |
-| data.items             | array        | 行程节点列表                                                       |
-| data.items[].dayIndex  | int          | 第几天（从1开始）                                                  |
-| data.items[].startTime | string\|null | 开始时间（HH:mm，依据提示词或当前时间，遵循餐后30–60分钟动态生成） |
-| data.items[].placeName | string       | 运动地点名称（必须为具体地点）                                     |
-| data.items[].placeType | string\|null | 运动类型/场景：walking/running/cycling/park/gym/indoor/outdoor     |
-| data.items[].duration  | int\|null    | 预计时长（分钟）                                                   |
-| data.items[].cost      | int\|null    | 预计消耗卡路里（kcal）                                             |
-| data.items[].notes     | string\|null | 运动建议、注意事项                                                 |
+| 字段                          | 类型         | 说明                                                               |
+| ----------------------------- | ------------ | ------------------------------------------------------------------ |
+| code                          | int          | 状态码，200表示成功                                                |
+| message                       | string       | 响应消息                                                           |
+| data                          | object       | 运动计划数据                                                       |
+| data.tripId                   | int          | 计划ID                                                             |
+| data.title                    | string       | 计划标题                                                           |
+| data.destination              | string\|null | 运动区域/起点（具体地点）                                          |
+| data.startDate                | string       | 开始日期（YYYY-MM-DD）                                             |
+| data.endDate                  | string       | 结束日期（YYYY-MM-DD）                                             |
+| data.items                    | array        | 行程节点列表                                                       |
+| data.items[].dayIndex         | int          | 第几天（从1开始）                                                  |
+| data.items[].startTime        | string\|null | 开始时间（HH:mm，依据提示词或当前时间，遵循餐后30–60分钟动态生成） |
+| data.items[].placeName        | string       | 运动地点名称（必须为具体地点）                                     |
+| data.items[].placeType        | string\|null | 运动类型/场景：walking/running/cycling/park/gym/indoor/outdoor     |
+| data.items[].duration         | int\|null    | 预计时长（分钟）                                                   |
+| data.items[].cost             | float\|null  | 预计消耗卡路里（kcal），基于METs公式精准计算                       |
+| data.items[].notes            | string\|null | 运动建议、注意事项（包含METs计算依据）                             |
+| data.items[].metsValue        | float\|null  | METs值（Phase 19新增）                                             |
+| data.items[].calculationBasis | string\|null | 热量计算依据公式（Phase 19新增）                                   |
 
 **错误响应**:
 - 请求参数错误（HTTP 400）:

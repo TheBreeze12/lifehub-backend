@@ -17,12 +17,15 @@ from app.models.trip import (
 from app.database import get_db
 from app.db_models.trip_plan import TripPlan
 from app.db_models.trip_item import TripItem
+from app.db_models.user import User
 from app.services.ai_service import AIService
+from app.services.mets_service import METsService
 
 router = APIRouter(prefix="/api/trip", tags=["运动规划"])
 
-# 初始化AI服务
+# 初始化AI服务和METs服务
 ai_service = AIService()
+mets_service = METsService()
 
 
 @router.post("/generate", response_model=GenerateTripResponse)
@@ -47,6 +50,10 @@ async def generate_trip(
                 "healthGoal": request.preferences.healthGoal,
                 "allergens": request.preferences.allergens or []
             }
+        
+        # 获取用户信息（体重等，用于METs计算）
+        user = db.query(User).filter(User.id == request.userId).first()
+        user_weight = user.weight if user and user.weight else mets_service.DEFAULT_WEIGHT_KG
         
         # 获取用户今日饮食记录（计算已摄入卡路里）
         from app.db_models.diet_record import DietRecord
@@ -94,7 +101,7 @@ async def generate_trip(
         db.add(trip_plan)
         db.flush()  # 获取trip_plan.id
         
-        # 创建运动节点
+        # 创建运动节点（使用METs精准计算热量消耗）
         items = trip_data.get("items", [])
         for index, item_data in enumerate(items):
             # 解析时间
@@ -106,8 +113,25 @@ async def generate_trip(
                 except:
                     pass
             
-            # cost字段存储卡路里消耗（语义转换）
-            calories_burned = item_data.get("cost")  # AI返回的cost字段实际是卡路里
+            # 使用METs公式精准计算热量消耗（Phase 19新增）
+            # 公式：消耗(kcal) = METs × 体重(kg) × 时间(h)
+            exercise_type = item_data.get("placeType") or "walking"
+            duration_minutes = item_data.get("duration") or 0
+            
+            # 使用METs服务计算精准热量
+            calories_burned = mets_service.calculate_calories(
+                exercise_type=exercise_type,
+                weight_kg=user_weight,
+                duration_minutes=duration_minutes
+            )
+            
+            # 获取METs值用于记录计算依据
+            mets_value = mets_service.get_mets_value(exercise_type)
+            
+            # 构建包含METs计算依据的备注
+            original_notes = item_data.get("notes") or ""
+            mets_note = f"[METs={mets_value}, 体重={user_weight}kg, 时长={duration_minutes}分钟]"
+            enhanced_notes = f"{original_notes} {mets_note}" if original_notes else mets_note
             
             trip_item = TripItem(
                 trip_id=trip_plan.id,
@@ -116,8 +140,8 @@ async def generate_trip(
                 place_name=item_data.get("placeName", ""),
                 place_type=item_data.get("placeType"),
                 duration=item_data.get("duration"),
-                cost=calories_burned,  # 存储卡路里消耗
-                notes=item_data.get("notes"),
+                cost=calories_burned,  # 使用METs精准计算的热量消耗
+                notes=enhanced_notes,  # 包含METs计算依据
                 sort_order=index
             )
             db.add(trip_item)
@@ -135,6 +159,12 @@ async def generate_trip(
             if item.start_time:
                 start_time_str = item.start_time.strftime("%H:%M")
             
+            # 获取METs值和计算依据（Phase 19新增）
+            exercise_type = item.place_type or "walking"
+            mets_value = mets_service.get_mets_value(exercise_type)
+            duration_hours = (item.duration or 0) / 60.0
+            calculation_basis = f"METs={mets_value} × {user_weight}kg × {duration_hours:.2f}h"
+            
             items_data.append(TripItemData(
                 dayIndex=item.day_index,
                 startTime=start_time_str,
@@ -142,7 +172,9 @@ async def generate_trip(
                 placeType=item.place_type,
                 duration=item.duration,
                 cost=item.cost,
-                notes=item.notes
+                notes=item.notes,
+                metsValue=mets_value,
+                calculationBasis=calculation_basis
             ))
         
         trip_response = TripData(
@@ -182,13 +214,19 @@ def _trip_plan_to_summary(trip_plan: TripPlan, item_count: int = 0) -> TripSumma
     )
 
 
-def _trip_plan_to_data(trip_plan: TripPlan, trip_items: List[TripItem]) -> TripData:
-    """将TripPlan和TripItems转换为TripData"""
+def _trip_plan_to_data(trip_plan: TripPlan, trip_items: List[TripItem], user_weight: float = 70.0) -> TripData:
+    """将TripPlan和TripItems转换为TripData（包含METs计算信息）"""
     items_data = []
     for item in trip_items:
         start_time_str = None
         if item.start_time:
             start_time_str = item.start_time.strftime("%H:%M")
+        
+        # 获取METs值和计算依据（Phase 19新增）
+        exercise_type = item.place_type or "walking"
+        mets_value = mets_service.get_mets_value(exercise_type)
+        duration_hours = (item.duration or 0) / 60.0
+        calculation_basis = f"METs={mets_value} × {user_weight}kg × {duration_hours:.2f}h"
         
         items_data.append(TripItemData(
             dayIndex=item.day_index,
@@ -197,7 +235,9 @@ def _trip_plan_to_data(trip_plan: TripPlan, trip_items: List[TripItem]) -> TripD
             placeType=item.place_type,
             duration=item.duration,
             cost=item.cost,
-            notes=item.notes
+            notes=item.notes,
+            metsValue=mets_value,
+            calculationBasis=calculation_basis
         ))
     
     return TripData(
@@ -342,13 +382,17 @@ async def get_trip_detail(
         if not trip_plan:
             raise HTTPException(status_code=404, detail=f"行程不存在，tripId: {tripId}")
         
+        # 获取用户体重用于METs计算（Phase 19新增）
+        user = db.query(User).filter(User.id == trip_plan.user_id).first()
+        user_weight = user.weight if user and user.weight else mets_service.DEFAULT_WEIGHT_KG
+        
         # 查询行程节点，按排序序号排序
         trip_items = db.query(TripItem).filter(
             TripItem.trip_id == tripId
         ).order_by(TripItem.sort_order, TripItem.day_index, TripItem.start_time).all()
         
-        # 转换为数据格式
-        trip_data = _trip_plan_to_data(trip_plan, trip_items)
+        # 转换为数据格式（包含METs计算信息）
+        trip_data = _trip_plan_to_data(trip_plan, trip_items, user_weight)
         
         return TripDetailResponse(
             code=200,
