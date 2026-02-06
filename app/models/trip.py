@@ -309,3 +309,113 @@ class GenerateRoutesResponse(BaseModel):
             }
         }
 
+
+# ==================== Phase 32: 天气动态调整 Plan B 模型 ====================
+
+class WeatherAssessment(BaseModel):
+    """天气评估结果"""
+    is_bad_weather: bool = Field(..., description="是否恶劣天气")
+    severity: str = Field(..., description="严重程度: good/mild/moderate/severe/unknown")
+    description: str = Field("", description="天气描述（中文）")
+    temperature: Optional[float] = Field(None, description="当前温度（℃）")
+    windspeed: Optional[float] = Field(None, description="风速（km/h）")
+    weathercode: Optional[int] = Field(None, description="WMO天气代码")
+    recommendation: str = Field("", description="建议")
+    warnings: Optional[List[str]] = Field(None, description="警告列表")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "is_bad_weather": True,
+                "severity": "moderate",
+                "description": "中雨",
+                "temperature": 18.0,
+                "windspeed": 15.0,
+                "weathercode": 63,
+                "recommendation": "天气不佳，建议改为室内运动",
+                "warnings": None
+            }
+        }
+
+
+class PlanBAlternative(BaseModel):
+    """Plan B 室内替代运动项"""
+    exercise_name: str = Field(..., description="运动名称")
+    exercise_type: str = Field(..., description="运动类型代码")
+    duration: int = Field(..., description="建议时长（分钟）")
+    calories: float = Field(..., description="预计消耗热量（kcal）")
+    is_indoor: bool = Field(True, description="是否室内运动")
+    description: str = Field("", description="运动描述")
+    mets_value: Optional[float] = Field(None, description="METs值")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "exercise_name": "室内跳绳",
+                "exercise_type": "jumping_rope",
+                "duration": 20,
+                "calories": 256.7,
+                "is_indoor": True,
+                "description": "高效室内有氧运动，燃脂效果好",
+                "mets_value": 11.0
+            }
+        }
+
+
+class PlanBData(BaseModel):
+    """Plan B 响应数据"""
+    plan_id: int = Field(..., description="原运动计划ID")
+    weather: WeatherAssessment = Field(..., description="天气评估")
+    need_plan_b: bool = Field(..., description="是否需要Plan B")
+    original_calories: float = Field(0.0, description="原计划总热量（kcal）")
+    alternatives: List[PlanBAlternative] = Field(default_factory=list, description="室内替代方案列表")
+    plan_b_total_calories: float = Field(0.0, description="Plan B总热量（kcal）")
+    reason: str = Field("", description="生成Plan B的原因")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "plan_id": 1,
+                "weather": {
+                    "is_bad_weather": True,
+                    "severity": "moderate",
+                    "description": "中雨",
+                    "recommendation": "天气不佳，建议改为室内运动"
+                },
+                "need_plan_b": True,
+                "original_calories": 280.0,
+                "alternatives": [],
+                "plan_b_total_calories": 275.0,
+                "reason": "当前天气不适合户外运动"
+            }
+        }
+
+
+class PlanBResponse(BaseModel):
+    """Plan B 响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    data: Optional[PlanBData] = Field(None, description="Plan B数据")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "已生成室内替代方案",
+                "data": {
+                    "plan_id": 1,
+                    "weather": {
+                        "is_bad_weather": True,
+                        "severity": "moderate",
+                        "description": "中雨",
+                        "recommendation": "天气不佳，建议改为室内运动"
+                    },
+                    "need_plan_b": True,
+                    "original_calories": 280.0,
+                    "alternatives": [],
+                    "plan_b_total_calories": 275.0,
+                    "reason": "当前天气不适合户外运动"
+                }
+            }
+        }
+

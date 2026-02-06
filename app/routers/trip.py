@@ -17,7 +17,11 @@ from app.models.trip import (
     GenerateRoutesResponse,
     RoutesResponseData,
     ParetoRoute,
-    RouteWaypoint
+    RouteWaypoint,
+    PlanBResponse,
+    PlanBData,
+    PlanBAlternative,
+    WeatherAssessment,
 )
 from app.database import get_db
 from app.db_models.trip_plan import TripPlan
@@ -26,12 +30,14 @@ from app.db_models.user import User
 from app.services.ai_service import AIService
 from app.services.mets_service import METsService
 from app.services.route_optimization_service import get_route_optimization_service
+from app.services.weather_service import WeatherService
 
 router = APIRouter(prefix="/api/trip", tags=["运动规划"])
 
-# 初始化AI服务和METs服务
+# 初始化AI服务、METs服务和天气服务
 ai_service = AIService()
 mets_service = METsService()
+weather_service = WeatherService()
 
 
 @router.post("/generate", response_model=GenerateTripResponse)
@@ -369,6 +375,122 @@ async def get_home_trips(
     except Exception as e:
         print(f"获取首页行程失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取首页行程失败: {str(e)}")
+
+
+# ==================== Phase 32: 天气动态调整 Plan B 接口 ====================
+
+@router.get("/plan-b/{plan_id}", response_model=PlanBResponse)
+async def get_plan_b(
+    plan_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取运动计划的天气动态调整方案（Plan B）
+
+    根据运动计划所在位置的当前天气，评估是否适合户外运动。
+    如果天气恶劣（中雨、大雪、雷暴、极端温度、大风等），
+    自动生成室内替代运动方案，保持热量消耗目标接近原计划。
+
+    - **plan_id**: 运动计划ID
+    """
+    try:
+        # 1. 查询运动计划
+        trip_plan = db.query(TripPlan).filter(TripPlan.id == plan_id).first()
+        if not trip_plan:
+            raise HTTPException(status_code=404, detail=f"运动计划不存在，plan_id: {plan_id}")
+
+        # 2. 获取用户体重
+        user = db.query(User).filter(User.id == trip_plan.user_id).first()
+        user_weight = user.weight if user and user.weight else mets_service.DEFAULT_WEIGHT_KG
+
+        # 3. 获取天气数据
+        weather_data = None
+        try:
+            if trip_plan.latitude is not None and trip_plan.longitude is not None:
+                weather_data = ai_service.get_weather_by_coords(
+                    trip_plan.latitude, trip_plan.longitude,
+                    address_hint=trip_plan.destination
+                )
+            elif trip_plan.destination:
+                weather_data = ai_service.get_weather_by_address(trip_plan.destination)
+        except Exception as weather_err:
+            print(f"获取天气失败: {weather_err}")
+
+        # 4. 评估天气
+        weather_eval = weather_service.evaluate_weather(weather_data)
+
+        # 构建天气评估模型
+        weather_assessment = WeatherAssessment(
+            is_bad_weather=weather_eval["is_bad_weather"],
+            severity=weather_eval["severity"],
+            description=weather_eval.get("description", ""),
+            temperature=weather_data.get("temperature") if weather_data else None,
+            windspeed=weather_data.get("windspeed") if weather_data else None,
+            weathercode=weather_data.get("weathercode") if weather_data else None,
+            recommendation=weather_eval.get("recommendation", ""),
+            warnings=weather_eval.get("warnings"),
+        )
+
+        # 5. 查询原计划运动项目
+        trip_items = db.query(TripItem).filter(
+            TripItem.trip_id == plan_id
+        ).order_by(TripItem.sort_order).all()
+
+        original_items = []
+        original_total_calories = 0.0
+        for item in trip_items:
+            item_dict = {
+                "place_name": item.place_name,
+                "place_type": item.place_type,
+                "duration": item.duration or 0,
+                "cost": item.cost or 0.0,
+            }
+            original_items.append(item_dict)
+            original_total_calories += item.cost or 0.0
+
+        # 6. 根据天气决定是否生成Plan B
+        need_plan_b = weather_eval["is_bad_weather"]
+        alternatives = []
+        plan_b_total_calories = 0.0
+        reason = ""
+
+        if need_plan_b:
+            plan_b_result = weather_service.generate_plan_b(original_items, weight_kg=user_weight)
+            reason = f"当前天气：{weather_eval.get('description', '不佳')}，{weather_eval.get('recommendation', '建议改为室内运动')}"
+
+            for alt in plan_b_result.get("alternatives", []):
+                alternatives.append(PlanBAlternative(
+                    exercise_name=alt["exercise_name"],
+                    exercise_type=alt["exercise_type"],
+                    duration=alt["duration"],
+                    calories=alt["calories"],
+                    is_indoor=alt["is_indoor"],
+                    description=alt["description"],
+                    mets_value=alt.get("mets_value"),
+                ))
+            plan_b_total_calories = plan_b_result.get("plan_b_total_calories", 0.0)
+        else:
+            reason = "当前天气适合户外运动，无需替代方案"
+
+        # 7. 构建响应
+        plan_b_data = PlanBData(
+            plan_id=plan_id,
+            weather=weather_assessment,
+            need_plan_b=need_plan_b,
+            original_calories=round(original_total_calories, 1),
+            alternatives=alternatives,
+            plan_b_total_calories=round(plan_b_total_calories, 1),
+            reason=reason,
+        )
+
+        message = "已生成室内替代方案" if need_plan_b else "天气良好，无需替代方案"
+        return PlanBResponse(code=200, message=message, data=plan_b_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取Plan B失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取Plan B失败: {str(e)}")
 
 
 @router.get("/{tripId}", response_model=TripDetailResponse)

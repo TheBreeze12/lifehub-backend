@@ -40,6 +40,7 @@
 | **运动** | `/api/trip/recent`             | GET  | 获取最近运动计划   |
 | **运动** | `/api/trip/home`               | GET  | 获取首页运动计划   |
 | **运动** | `/api/trip/{tripId}`           | GET  | 获取运动计划详情   |
+| **运动** | `/api/trip/plan-b/{plan_id}`   | GET  | 获取天气动态调整Plan B |
 | **天气** | `/api/weather/by-address`      | GET  | 根据地址查询天气   |
 | **天气** | `/api/weather/by-plan`         | GET  | 根据计划ID查询天气 |
 | **运动记录** | `/api/exercise/record`   | POST | 新增运动记录       |
@@ -1340,6 +1341,131 @@ Content-Type: application/json
       "type": "value_error.number.not_le"
     }
   ]
+}
+```
+
+---
+
+### 12.2 获取天气动态调整 Plan B ⭐ (Phase 32 新增)
+
+**接口地址**: `GET /api/trip/plan-b/{plan_id}`
+
+**接口描述**: 根据运动计划所在位置的当前天气，评估是否适合户外运动。如果天气恶劣（中雨、大雪、雷暴、极端温度、大风等），自动生成室内替代运动方案（Plan B），保持热量消耗目标接近原计划。
+
+**路径参数**:
+| 参数名  | 类型 | 必填 | 说明       |
+| ------- | ---- | ---- | ---------- |
+| plan_id | int  | 是   | 运动计划ID |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/trip/plan-b/1
+```
+
+**响应示例（恶劣天气，需要Plan B）**:
+```json
+{
+  "code": 200,
+  "message": "已生成室内替代方案",
+  "data": {
+    "plan_id": 1,
+    "weather": {
+      "is_bad_weather": true,
+      "severity": "moderate",
+      "description": "中雨",
+      "temperature": 18.0,
+      "windspeed": 15.0,
+      "weathercode": 63,
+      "recommendation": "天气不佳，建议改为室内运动",
+      "warnings": null
+    },
+    "need_plan_b": true,
+    "original_calories": 280.0,
+    "alternatives": [
+      {
+        "exercise_name": "力量训练",
+        "exercise_type": "weight_training",
+        "duration": 48,
+        "calories": 280.0,
+        "is_indoor": true,
+        "description": "哑铃或自重力量训练",
+        "mets_value": 5.0
+      },
+      {
+        "exercise_name": "有氧健身操",
+        "exercise_type": "aerobics",
+        "duration": 10,
+        "calories": 75.8,
+        "is_indoor": true,
+        "description": "跟随视频进行有氧健身操训练",
+        "mets_value": 6.5
+      }
+    ],
+    "plan_b_total_calories": 355.8,
+    "reason": "当前天气：中雨，天气不佳，建议改为室内运动"
+  }
+}
+```
+
+**响应示例（天气良好，无需Plan B）**:
+```json
+{
+  "code": 200,
+  "message": "天气良好，无需替代方案",
+  "data": {
+    "plan_id": 1,
+    "weather": {
+      "is_bad_weather": false,
+      "severity": "good",
+      "description": "晴天",
+      "temperature": 22.0,
+      "windspeed": 5.0,
+      "weathercode": 0,
+      "recommendation": "天气良好，适合户外运动",
+      "warnings": null
+    },
+    "need_plan_b": false,
+    "original_calories": 280.0,
+    "alternatives": [],
+    "plan_b_total_calories": 0.0,
+    "reason": "当前天气适合户外运动，无需替代方案"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                  | 类型    | 说明                                    |
+| ------------------------------------- | ------- | --------------------------------------- |
+| code                                  | int     | 状态码，200表示成功                     |
+| message                               | string  | 响应消息                                |
+| data.plan_id                          | int     | 原运动计划ID                            |
+| data.weather                          | object  | 天气评估结果                            |
+| data.weather.is_bad_weather           | bool    | 是否恶劣天气                            |
+| data.weather.severity                 | string  | 严重程度：good/mild/moderate/severe     |
+| data.weather.description              | string  | 天气描述（中文）                        |
+| data.weather.temperature              | float   | 当前温度（℃）                           |
+| data.weather.windspeed                | float   | 风速（km/h）                            |
+| data.weather.weathercode              | int     | WMO天气代码                             |
+| data.weather.recommendation           | string  | 建议                                    |
+| data.weather.warnings                 | array   | 警告列表（极端温度/大风等）             |
+| data.need_plan_b                      | bool    | 是否需要Plan B                          |
+| data.original_calories                | float   | 原计划总热量（kcal）                    |
+| data.alternatives                     | array   | 室内替代方案列表                        |
+| data.alternatives[].exercise_name     | string  | 运动名称                                |
+| data.alternatives[].exercise_type     | string  | 运动类型代码                            |
+| data.alternatives[].duration          | int     | 建议时长（分钟）                        |
+| data.alternatives[].calories          | float   | 预计消耗热量（kcal）                    |
+| data.alternatives[].is_indoor         | bool    | 是否室内运动                            |
+| data.alternatives[].description       | string  | 运动描述                                |
+| data.alternatives[].mets_value        | float   | METs值                                  |
+| data.plan_b_total_calories            | float   | Plan B总热量（kcal）                    |
+| data.reason                           | string  | 生成Plan B的原因                        |
+
+**错误响应**:
+- 计划不存在（HTTP 404）:
+```json
+{
+  "detail": "运动计划不存在，plan_id: 999"
 }
 ```
 
