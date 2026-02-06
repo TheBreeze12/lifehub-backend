@@ -42,6 +42,11 @@
 | **运动** | `/api/trip/{tripId}`           | GET  | 获取运动计划详情   |
 | **天气** | `/api/weather/by-address`      | GET  | 根据地址查询天气   |
 | **天气** | `/api/weather/by-plan`         | GET  | 根据计划ID查询天气 |
+| **运动记录** | `/api/exercise/record`   | POST | 新增运动记录       |
+| **运动记录** | `/api/exercise/records`  | GET  | 查询运动记录列表   |
+| **运动记录** | `/api/exercise/record/{record_id}` | GET | 查询运动记录详情 |
+| **运动记录** | `/api/exercise/record/{record_id}` | DELETE | 删除运动记录   |
+| **运动记录** | `/api/exercise/health`   | GET  | 运动记录服务健康检查 |
 
 ---
 
@@ -2338,7 +2343,299 @@ GET http://localhost:8000/api/stats/nutrients/daily?userId=1&date=2026-02-05
 
 ---
 
+### 20. 新增运动记录 ⭐
+
+**接口地址**: `POST /api/exercise/record`
+
+**接口描述**: 新增一条运动执行记录，可关联运动计划
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名           | 类型         | 必填 | 说明                                                                     |
+| ---------------- | ------------ | ---- | ------------------------------------------------------------------------ |
+| user_id          | int          | 是   | 用户ID，>0                                                               |
+| plan_id          | int\|null    | 否   | 关联的运动计划ID（可选，关联后自动填充计划数据）                         |
+| exercise_type    | string       | 否   | 运动类型，默认walking。可选值见下方                                      |
+| actual_calories  | float        | 是   | 实际消耗热量（kcal），≥0                                                 |
+| actual_duration  | int          | 是   | 实际运动时长（分钟），≥1                                                 |
+| distance         | float\|null  | 否   | 运动距离（米），≥0                                                       |
+| route_data       | string\|null | 否   | 路线数据（JSON格式）                                                     |
+| planned_calories | float\|null  | 否   | 计划消耗热量（kcal）。关联plan_id时可自动从计划读取                      |
+| planned_duration | int\|null    | 否   | 计划运动时长（分钟）。关联plan_id时可自动从计划读取                      |
+| exercise_date    | string       | 是   | 运动日期（YYYY-MM-DD格式）                                               |
+| started_at       | string\|null | 否   | 运动开始时间（ISO格式，如 2026-02-06T18:00:00）                          |
+| ended_at         | string\|null | 否   | 运动结束时间（ISO格式），必须晚于started_at                              |
+| notes            | string\|null | 否   | 运动备注，最大500字符                                                    |
+
+**exercise_type 可选值**:
+- `walking` - 步行（默认）
+- `running` - 跑步
+- `cycling` - 骑行
+- `jogging` - 慢跑
+- `hiking` - 徒步
+- `swimming` - 游泳
+- `gym` - 健身房
+- `indoor` - 室内运动
+- `outdoor` - 户外运动
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/exercise/record
+Content-Type: application/json
+
+{
+  "user_id": 1,
+  "plan_id": 1,
+  "exercise_type": "running",
+  "actual_calories": 280.0,
+  "actual_duration": 35,
+  "distance": 4500.0,
+  "exercise_date": "2026-02-06",
+  "started_at": "2026-02-06T18:00:00",
+  "ended_at": "2026-02-06T18:35:00",
+  "notes": "沿河跑步，感觉不错"
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "运动记录添加成功",
+  "data": {
+    "id": 1,
+    "user_id": 1,
+    "plan_id": 1,
+    "exercise_type": "running",
+    "actual_calories": 280.0,
+    "actual_duration": 35,
+    "distance": 4500.0,
+    "route_data": null,
+    "planned_calories": 300.0,
+    "planned_duration": 35,
+    "exercise_date": "2026-02-06",
+    "started_at": "2026-02-06T18:00:00",
+    "ended_at": "2026-02-06T18:35:00",
+    "notes": "沿河跑步，感觉不错",
+    "created_at": "2026-02-06T18:40:00",
+    "calories_achievement": 93.3,
+    "duration_achievement": 100.0
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                      | 类型        | 说明                                         |
+| ------------------------- | ----------- | -------------------------------------------- |
+| data.id                   | int         | 运动记录ID                                   |
+| data.user_id              | int         | 用户ID                                       |
+| data.plan_id              | int\|null   | 关联的运动计划ID                             |
+| data.exercise_type        | string      | 运动类型                                     |
+| data.actual_calories      | float       | 实际消耗热量（kcal）                         |
+| data.actual_duration      | int         | 实际运动时长（分钟）                         |
+| data.distance             | float\|null | 运动距离（米）                               |
+| data.planned_calories     | float\|null | 计划消耗热量（kcal）                         |
+| data.planned_duration     | int\|null   | 计划运动时长（分钟）                         |
+| data.exercise_date        | string      | 运动日期                                     |
+| data.started_at           | string\|null| 运动开始时间                                 |
+| data.ended_at             | string\|null| 运动结束时间                                 |
+| data.notes                | string\|null| 运动备注                                     |
+| data.created_at           | string      | 记录创建时间                                 |
+| data.calories_achievement | float\|null | 热量达成率（%），实际/计划×100               |
+| data.duration_achievement | float\|null | 时长达成率（%），实际/计划×100               |
+
+**错误响应**:
+
+*用户不存在*（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，user_id: 1"
+}
+```
+
+*不支持的运动类型*（HTTP 400）:
+```json
+{
+  "detail": "不支持的运动类型: skateboarding，支持的类型: cycling, gym, hiking, indoor, jogging, outdoor, running, swimming, walking"
+}
+```
+
+*运动计划不存在*（HTTP 404）:
+```json
+{
+  "detail": "运动计划不存在，plan_id: 999"
+}
+```
+
+*无权关联他人计划*（HTTP 403）:
+```json
+{
+  "detail": "无权关联此运动计划，只能关联自己的计划"
+}
+```
+
+---
+
+### 21. 查询运动记录列表 ⭐
+
+**接口地址**: `GET /api/exercise/records`
+
+**接口描述**: 查询用户的运动记录列表，支持按日期、运动类型、计划ID筛选和分页
+
+**请求参数**:
+| 参数名        | 类型        | 必填 | 说明                                     |
+| ------------- | ----------- | ---- | ---------------------------------------- |
+| userId        | int         | 是   | 用户ID                                   |
+| exercise_date | string\|null| 否   | 按日期筛选（YYYY-MM-DD格式）             |
+| exercise_type | string\|null| 否   | 按运动类型筛选                           |
+| plan_id       | int\|null   | 否   | 按运动计划ID筛选                         |
+| limit         | int         | 否   | 返回数量限制（默认50，最大200）          |
+| offset        | int         | 否   | 偏移量（默认0）                          |
+
+**请求示例**:
+```bash
+# 查询全部记录
+GET http://localhost:8000/api/exercise/records?userId=1
+
+# 按日期筛选
+GET http://localhost:8000/api/exercise/records?userId=1&exercise_date=2026-02-06
+
+# 按运动类型筛选
+GET http://localhost:8000/api/exercise/records?userId=1&exercise_type=running
+
+# 分页查询
+GET http://localhost:8000/api/exercise/records?userId=1&limit=10&offset=0
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "plan_id": 1,
+      "exercise_type": "running",
+      "actual_calories": 280.0,
+      "actual_duration": 35,
+      "distance": 4500.0,
+      "exercise_date": "2026-02-06",
+      "calories_achievement": 93.3,
+      "duration_achievement": 100.0
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### 22. 查询运动记录详情 ⭐
+
+**接口地址**: `GET /api/exercise/record/{record_id}`
+
+**接口描述**: 查询指定运动记录的详情（含权限校验）
+
+**路径参数**:
+| 参数名    | 类型 | 必填 | 说明       |
+| --------- | ---- | ---- | ---------- |
+| record_id | int  | 是   | 运动记录ID |
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                   |
+| ------ | ---- | ---- | ---------------------- |
+| userId | int  | 是   | 用户ID（用于权限校验） |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/exercise/record/1?userId=1
+```
+
+**响应示例**: 与新增运动记录响应的 `data` 字段格式相同
+
+**错误响应**:
+
+*记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "运动记录不存在，record_id: 1"
+}
+```
+
+*无权查看*（HTTP 403）:
+```json
+{
+  "detail": "无权查看此运动记录，只能查看自己的记录"
+}
+```
+
+---
+
+### 23. 删除运动记录 ⭐
+
+**接口地址**: `DELETE /api/exercise/record/{record_id}`
+
+**接口描述**: 删除指定运动记录（含权限校验）
+
+**路径参数**:
+| 参数名    | 类型 | 必填 | 说明       |
+| --------- | ---- | ---- | ---------- |
+| record_id | int  | 是   | 运动记录ID |
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                   |
+| ------ | ---- | ---- | ---------------------- |
+| userId | int  | 是   | 用户ID（用于权限校验） |
+
+**请求示例**:
+```bash
+DELETE http://localhost:8000/api/exercise/record/1?userId=1
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "删除成功",
+  "data": null
+}
+```
+
+**错误响应**:
+
+*记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "运动记录不存在，record_id: 1"
+}
+```
+
+*无权删除*（HTTP 403）:
+```json
+{
+  "detail": "无权删除此运动记录，只能删除自己的记录"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.6.0 (2026-02-06)
+- ✅ 添加运动记录数据模型 `ExerciseRecord`（Phase 25）
+- ✅ 添加新增运动记录接口 `POST /api/exercise/record`
+- ✅ 添加查询运动记录列表接口 `GET /api/exercise/records`（支持按日期/类型/计划ID筛选、分页）
+- ✅ 添加查询运动记录详情接口 `GET /api/exercise/record/{record_id}`
+- ✅ 添加删除运动记录接口 `DELETE /api/exercise/record/{record_id}`
+- ✅ 支持关联运动计划、自动填充计划数据
+- ✅ 支持热量达成率和时长达成率计算
+- ✅ 完善权限校验（只能操作自己的记录）
 
 ### v1.5.0 (2026-02-05)
 - ✅ 添加每日营养素统计接口 `/api/stats/nutrients/daily`（Phase 16）
