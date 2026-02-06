@@ -3,6 +3,7 @@
 Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
 Phase 26: 饮食-运动数据联动
+Phase 36: 健康目标达成率
 
 提供每日/每周热量统计功能：
 - 统计饮食记录的摄入热量
@@ -12,20 +13,23 @@ Phase 26: 饮食-运动数据联动
 - 计算实际热量缺口和目标达成率（Phase 26新增）
 - 统计营养素（蛋白质、脂肪、碳水）摄入比例
 - 与膳食指南建议值对比
+- 根据用户健康目标计算多维度达成率（Phase 36新增）
 """
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
-from typing import Optional
+from typing import Optional, List
 
 from app.db_models.diet_record import DietRecord
 from app.db_models.trip_plan import TripPlan
 from app.db_models.trip_item import TripItem
 from app.db_models.exercise_record import ExerciseRecord
+from app.db_models.user import User
 from app.models.stats import (
     DailyCalorieStats, WeeklyCalorieStats, DailyBreakdown,
     DailyNutrientStats, NutrientComparison, GuidelinesComparison,
-    DIETARY_GUIDELINES, PROTEIN_KCAL_PER_GRAM, FAT_KCAL_PER_GRAM, CARBS_KCAL_PER_GRAM
+    DIETARY_GUIDELINES, PROTEIN_KCAL_PER_GRAM, FAT_KCAL_PER_GRAM, CARBS_KCAL_PER_GRAM,
+    GoalProgressData, GoalDimension, HEALTH_GOAL_LABELS
 )
 
 
@@ -426,6 +430,565 @@ class StatsService:
             meal_count=meal_count,
             meal_breakdown=cleaned_meal_breakdown if cleaned_meal_breakdown else None,
             guidelines_comparison=guidelines_comparison
+        )
+
+
+    # ============== Phase 36: 健康目标达成率方法 ==============
+
+    @staticmethod
+    def _score_to_status(score: float) -> str:
+        """将分数转换为状态标签"""
+        if score >= 85:
+            return "excellent"
+        elif score >= 65:
+            return "good"
+        elif score >= 40:
+            return "fair"
+        else:
+            return "poor"
+
+    @staticmethod
+    def _clamp_score(score: float) -> float:
+        """将分数限制在0-100范围内"""
+        return round(max(0.0, min(100.0, score)), 1)
+
+    def _calc_streak_days(
+        self, db: Session, user_id: int, end_date: date
+    ) -> int:
+        """
+        计算从end_date往前的连续记录天数。
+        只要某天有饮食记录或运动记录就算有记录。
+        """
+        streak = 0
+        current = end_date
+        while True:
+            has_diet = db.query(DietRecord).filter(
+                and_(
+                    DietRecord.user_id == user_id,
+                    DietRecord.record_date == current
+                )
+            ).first() is not None
+
+            has_exercise = db.query(ExerciseRecord).filter(
+                and_(
+                    ExerciseRecord.user_id == user_id,
+                    ExerciseRecord.exercise_date == current
+                )
+            ).first() is not None
+
+            if has_diet or has_exercise:
+                streak += 1
+                current -= timedelta(days=1)
+            else:
+                break
+        return streak
+
+    def _gather_period_data(
+        self, db: Session, user_id: int, start_date: date, end_date: date
+    ) -> dict:
+        """
+        收集统计周期内的汇总数据。
+        返回字典包含各种累计值和日均值。
+        """
+        total_days = (end_date - start_date).days + 1
+        days_with_diet = 0
+        days_with_exercise = 0
+
+        sum_calories = 0.0
+        sum_protein = 0.0
+        sum_fat = 0.0
+        sum_carbs = 0.0
+        sum_burn = 0.0
+        sum_exercise_duration = 0
+        sum_planned_burn = 0.0
+
+        for i in range(total_days):
+            d = start_date + timedelta(days=i)
+
+            # 饮食
+            diet_records = db.query(DietRecord).filter(
+                and_(DietRecord.user_id == user_id, DietRecord.record_date == d)
+            ).all()
+            if diet_records:
+                days_with_diet += 1
+            for r in diet_records:
+                sum_calories += r.calories or 0.0
+                sum_protein += r.protein or 0.0
+                sum_fat += r.fat or 0.0
+                sum_carbs += r.carbs or 0.0
+
+            # 运动记录（实际）
+            ex_records = db.query(ExerciseRecord).filter(
+                and_(ExerciseRecord.user_id == user_id, ExerciseRecord.exercise_date == d)
+            ).all()
+            if ex_records:
+                days_with_exercise += 1
+            for er in ex_records:
+                sum_burn += er.actual_calories or 0.0
+                sum_exercise_duration += er.actual_duration or 0
+
+            # 运动计划（计划消耗）
+            plans = db.query(TripPlan).filter(
+                and_(
+                    TripPlan.user_id == user_id,
+                    TripPlan.start_date <= d,
+                    TripPlan.end_date >= d
+                )
+            ).all()
+            for p in plans:
+                items = db.query(TripItem).filter(TripItem.trip_id == p.id).all()
+                for item in items:
+                    sum_planned_burn += item.cost or 0.0
+
+        active_days = max(days_with_diet, days_with_exercise)
+        divisor = active_days if active_days > 0 else 1
+
+        # 营养素热量占比
+        protein_cal = sum_protein * PROTEIN_KCAL_PER_GRAM
+        fat_cal = sum_fat * FAT_KCAL_PER_GRAM
+        carbs_cal = sum_carbs * CARBS_KCAL_PER_GRAM
+        nutrient_cal_total = protein_cal + fat_cal + carbs_cal
+
+        if nutrient_cal_total > 0:
+            protein_ratio = (protein_cal / nutrient_cal_total) * 100
+            fat_ratio = (fat_cal / nutrient_cal_total) * 100
+            carbs_ratio = (carbs_cal / nutrient_cal_total) * 100
+        else:
+            protein_ratio = 0.0
+            fat_ratio = 0.0
+            carbs_ratio = 0.0
+
+        return {
+            "total_days": total_days,
+            "active_days": active_days,
+            "days_with_diet": days_with_diet,
+            "days_with_exercise": days_with_exercise,
+            "sum_calories": sum_calories,
+            "sum_protein": sum_protein,
+            "sum_fat": sum_fat,
+            "sum_carbs": sum_carbs,
+            "sum_burn": sum_burn,
+            "sum_exercise_duration": sum_exercise_duration,
+            "sum_planned_burn": sum_planned_burn,
+            "avg_calories": sum_calories / divisor,
+            "avg_protein": sum_protein / divisor,
+            "avg_burn": sum_burn / divisor,
+            "avg_exercise_duration": sum_exercise_duration / divisor,
+            "protein_ratio": protein_ratio,
+            "fat_ratio": fat_ratio,
+            "carbs_ratio": carbs_ratio,
+        }
+
+    def _evaluate_reduce_fat(self, data: dict, user: User) -> tuple:
+        """减脂目标评估，返回 (dimensions, suggestions)"""
+        dims: List[GoalDimension] = []
+        suggestions: List[str] = []
+
+        # 基础代谢估算（Mifflin-St Jeor）
+        weight = user.weight or 70.0
+        height = user.height or 170.0
+        age = user.age or 30
+        if (user.gender or "male") == "male":
+            bmr = 10 * weight + 6.25 * height - 5 * age + 5
+        else:
+            bmr = 10 * weight + 6.25 * height - 5 * age - 161
+        target_intake = bmr * 1.2  # 轻度活动TDEE
+        # 减脂建议热量 = TDEE - 500
+        target_deficit_intake = target_intake - 500
+
+        # 维度1: 热量控制
+        avg_cal = data["avg_calories"]
+        if avg_cal <= 0:
+            cal_score = 50.0
+            cal_desc = "暂无饮食数据"
+        else:
+            # 越接近 target_deficit_intake 得分越高
+            ratio = avg_cal / target_deficit_intake if target_deficit_intake > 0 else 1.0
+            if ratio <= 1.0:
+                cal_score = min(100.0, 60 + 40 * ratio)
+            else:
+                cal_score = max(0.0, 100 - (ratio - 1.0) * 150)
+            cal_desc = f"日均摄入{avg_cal:.0f}kcal，建议{target_deficit_intake:.0f}kcal"
+        dims.append(GoalDimension(
+            name="热量控制", score=self._clamp_score(cal_score),
+            status=self._score_to_status(cal_score),
+            current_value=round(avg_cal, 1),
+            target_value=round(target_deficit_intake, 1),
+            unit="kcal/天", description=cal_desc
+        ))
+        if avg_cal > target_deficit_intake * 1.1 and avg_cal > 0:
+            suggestions.append("建议降低每日热量摄入，保持适度热量缺口以促进减脂")
+
+        # 维度2: 脂肪比例
+        fat_r = data["fat_ratio"]
+        fat_target_max = DIETARY_GUIDELINES["fat"]["max"]
+        if data["sum_calories"] <= 0:
+            fat_score = 50.0
+            fat_desc = "暂无营养数据"
+        elif fat_r <= fat_target_max:
+            fat_score = 80 + (fat_target_max - fat_r)
+            fat_desc = f"脂肪占比{fat_r:.1f}%，在建议范围内"
+        else:
+            fat_score = max(0, 80 - (fat_r - fat_target_max) * 5)
+            fat_desc = f"脂肪占比{fat_r:.1f}%，超出建议上限{fat_target_max}%"
+            suggestions.append("脂肪摄入比例偏高，建议减少油炸和高脂食物")
+        dims.append(GoalDimension(
+            name="脂肪比例", score=self._clamp_score(fat_score),
+            status=self._score_to_status(fat_score),
+            current_value=round(fat_r, 1),
+            target_value=float(fat_target_max),
+            unit="%", description=fat_desc
+        ))
+
+        # 维度3: 运动消耗
+        avg_burn = data["avg_burn"]
+        target_burn = 300.0  # 减脂建议日均消耗
+        if avg_burn <= 0:
+            burn_score = 20.0
+            burn_desc = "暂无运动记录"
+            suggestions.append("建议每日进行至少30分钟有氧运动以促进减脂")
+        else:
+            burn_ratio = avg_burn / target_burn
+            burn_score = min(100.0, burn_ratio * 100)
+            burn_desc = f"日均运动消耗{avg_burn:.0f}kcal，建议{target_burn:.0f}kcal"
+            if avg_burn < target_burn * 0.7:
+                suggestions.append("运动消耗不足，建议增加有氧运动频率和时长")
+        dims.append(GoalDimension(
+            name="运动消耗", score=self._clamp_score(burn_score),
+            status=self._score_to_status(burn_score),
+            current_value=round(avg_burn, 1),
+            target_value=target_burn,
+            unit="kcal/天", description=burn_desc
+        ))
+
+        return dims, suggestions
+
+    def _evaluate_gain_muscle(self, data: dict, user: User) -> tuple:
+        """增肌目标评估"""
+        dims: List[GoalDimension] = []
+        suggestions: List[str] = []
+
+        weight = user.weight or 70.0
+
+        # 维度1: 蛋白质摄入（增肌建议1.6-2.2g/kg体重）
+        avg_protein = data["avg_protein"]
+        target_protein = weight * 1.8  # 中间值
+        if avg_protein <= 0:
+            prot_score = 20.0
+            prot_desc = "暂无蛋白质摄入数据"
+            suggestions.append("增肌需要充足蛋白质，建议每日摄入1.6-2.2g/kg体重")
+        else:
+            prot_ratio = avg_protein / target_protein
+            if prot_ratio >= 1.0:
+                prot_score = min(100.0, 85 + (prot_ratio - 1.0) * 30)
+            else:
+                prot_score = max(0.0, prot_ratio * 85)
+            prot_desc = f"日均蛋白质{avg_protein:.1f}g，建议{target_protein:.0f}g"
+            if prot_ratio < 0.8:
+                suggestions.append(f"蛋白质摄入不足，建议增加至每日{target_protein:.0f}g以上")
+        dims.append(GoalDimension(
+            name="蛋白质摄入", score=self._clamp_score(prot_score),
+            status=self._score_to_status(prot_score),
+            current_value=round(avg_protein, 1),
+            target_value=round(target_protein, 1),
+            unit="g/天", description=prot_desc
+        ))
+
+        # 维度2: 热量充足（增肌需要热量盈余）
+        avg_cal = data["avg_calories"]
+        height = user.height or 170.0
+        age = user.age or 25
+        if (user.gender or "male") == "male":
+            bmr = 10 * weight + 6.25 * height - 5 * age + 5
+        else:
+            bmr = 10 * weight + 6.25 * height - 5 * age - 161
+        target_intake = bmr * 1.4 + 300  # TDEE + 盈余
+        if avg_cal <= 0:
+            cal_score = 30.0
+            cal_desc = "暂无热量数据"
+        else:
+            ratio = avg_cal / target_intake
+            if ratio >= 0.9:
+                cal_score = min(100.0, 70 + ratio * 30)
+            else:
+                cal_score = max(0.0, ratio * 80)
+            cal_desc = f"日均摄入{avg_cal:.0f}kcal，增肌建议{target_intake:.0f}kcal"
+            if ratio < 0.85:
+                suggestions.append("热量摄入不足以支撑增肌，建议适当增加热量摄入")
+        dims.append(GoalDimension(
+            name="热量充足", score=self._clamp_score(cal_score),
+            status=self._score_to_status(cal_score),
+            current_value=round(avg_cal, 1),
+            target_value=round(target_intake, 1),
+            unit="kcal/天", description=cal_desc
+        ))
+
+        # 维度3: 运动消耗（力量训练）
+        avg_burn = data["avg_burn"]
+        target_burn = 400.0
+        if avg_burn <= 0:
+            burn_score = 20.0
+            burn_desc = "暂无运动记录"
+            suggestions.append("增肌需要规律的力量训练，建议每周至少3次")
+        else:
+            burn_ratio = avg_burn / target_burn
+            burn_score = min(100.0, burn_ratio * 100)
+            burn_desc = f"日均运动消耗{avg_burn:.0f}kcal，建议{target_burn:.0f}kcal"
+        dims.append(GoalDimension(
+            name="运动消耗", score=self._clamp_score(burn_score),
+            status=self._score_to_status(burn_score),
+            current_value=round(avg_burn, 1),
+            target_value=target_burn,
+            unit="kcal/天", description=burn_desc
+        ))
+
+        return dims, suggestions
+
+    def _evaluate_control_sugar(self, data: dict, user: User) -> tuple:
+        """控糖目标评估"""
+        dims: List[GoalDimension] = []
+        suggestions: List[str] = []
+
+        # 维度1: 碳水比例（控糖目标希望碳水比例偏低，建议<=50%）
+        carbs_r = data["carbs_ratio"]
+        target_carbs_max = 50.0  # 控糖目标建议碳水不超过50%
+        if data["sum_calories"] <= 0:
+            carbs_score = 50.0
+            carbs_desc = "暂无营养数据"
+        elif carbs_r <= target_carbs_max:
+            carbs_score = 80 + (target_carbs_max - carbs_r)
+            carbs_desc = f"碳水占比{carbs_r:.1f}%，控制良好"
+        else:
+            carbs_score = max(0, 80 - (carbs_r - target_carbs_max) * 4)
+            carbs_desc = f"碳水占比{carbs_r:.1f}%，建议控制在{target_carbs_max}%以下"
+            suggestions.append("碳水化合物比例偏高，建议减少精制碳水和甜食摄入")
+        dims.append(GoalDimension(
+            name="碳水比例", score=self._clamp_score(carbs_score),
+            status=self._score_to_status(carbs_score),
+            current_value=round(carbs_r, 1),
+            target_value=target_carbs_max,
+            unit="%", description=carbs_desc
+        ))
+
+        # 维度2: 热量控制
+        weight = user.weight or 70.0
+        height = user.height or 170.0
+        age = user.age or 30
+        if (user.gender or "male") == "male":
+            bmr = 10 * weight + 6.25 * height - 5 * age + 5
+        else:
+            bmr = 10 * weight + 6.25 * height - 5 * age - 161
+        target_intake = bmr * 1.3
+        avg_cal = data["avg_calories"]
+        if avg_cal <= 0:
+            cal_score = 50.0
+            cal_desc = "暂无热量数据"
+        else:
+            ratio = avg_cal / target_intake if target_intake > 0 else 1.0
+            if 0.85 <= ratio <= 1.1:
+                cal_score = 90.0
+            elif ratio < 0.85:
+                cal_score = max(40, 90 - (0.85 - ratio) * 200)
+            else:
+                cal_score = max(0, 90 - (ratio - 1.1) * 150)
+            cal_desc = f"日均摄入{avg_cal:.0f}kcal，建议{target_intake:.0f}kcal"
+            if ratio > 1.2:
+                suggestions.append("热量摄入偏高，建议适当控制总热量")
+        dims.append(GoalDimension(
+            name="热量控制", score=self._clamp_score(cal_score),
+            status=self._score_to_status(cal_score),
+            current_value=round(avg_cal, 1),
+            target_value=round(target_intake, 1),
+            unit="kcal/天", description=cal_desc
+        ))
+
+        # 维度3: 运动辅助
+        avg_burn = data["avg_burn"]
+        target_burn = 250.0
+        if avg_burn <= 0:
+            burn_score = 30.0
+            burn_desc = "暂无运动记录"
+            suggestions.append("适当运动有助于控糖，建议每日进行中等强度运动")
+        else:
+            burn_ratio = avg_burn / target_burn
+            burn_score = min(100.0, burn_ratio * 100)
+            burn_desc = f"日均运动消耗{avg_burn:.0f}kcal，建议{target_burn:.0f}kcal"
+        dims.append(GoalDimension(
+            name="运动辅助", score=self._clamp_score(burn_score),
+            status=self._score_to_status(burn_score),
+            current_value=round(avg_burn, 1),
+            target_value=target_burn,
+            unit="kcal/天", description=burn_desc
+        ))
+
+        return dims, suggestions
+
+    def _evaluate_balanced(self, data: dict, user: User) -> tuple:
+        """均衡目标评估"""
+        dims: List[GoalDimension] = []
+        suggestions: List[str] = []
+
+        # 维度1: 营养均衡（三大营养素是否在膳食指南范围内）
+        prot_r = data["protein_ratio"]
+        fat_r = data["fat_ratio"]
+        carbs_r = data["carbs_ratio"]
+
+        if data["sum_calories"] <= 0:
+            balance_score = 50.0
+            balance_desc = "暂无营养数据"
+        else:
+            score_parts = []
+            for nutrient, ratio in [("protein", prot_r), ("fat", fat_r), ("carbs", carbs_r)]:
+                g = DIETARY_GUIDELINES[nutrient]
+                mid = (g["min"] + g["max"]) / 2
+                half_range = (g["max"] - g["min"]) / 2
+                if g["min"] <= ratio <= g["max"]:
+                    # 在范围内，越接近中点越好
+                    dist = abs(ratio - mid) / half_range
+                    score_parts.append(85 + (1 - dist) * 15)
+                else:
+                    # 超出范围
+                    if ratio < g["min"]:
+                        deviation = g["min"] - ratio
+                    else:
+                        deviation = ratio - g["max"]
+                    score_parts.append(max(0, 80 - deviation * 5))
+
+            balance_score = sum(score_parts) / len(score_parts)
+            in_range_count = sum(1 for n, r in [("protein", prot_r), ("fat", fat_r), ("carbs", carbs_r)]
+                                 if DIETARY_GUIDELINES[n]["min"] <= r <= DIETARY_GUIDELINES[n]["max"])
+            balance_desc = f"三大营养素{in_range_count}/3项在推荐范围内"
+
+            if prot_r < DIETARY_GUIDELINES["protein"]["min"]:
+                suggestions.append("蛋白质摄入偏低，建议增加优质蛋白来源")
+            if fat_r > DIETARY_GUIDELINES["fat"]["max"]:
+                suggestions.append("脂肪摄入偏高，建议减少油脂摄入")
+            if carbs_r > DIETARY_GUIDELINES["carbs"]["max"]:
+                suggestions.append("碳水化合物摄入偏高，建议适当控制主食量")
+
+        dims.append(GoalDimension(
+            name="营养均衡", score=self._clamp_score(balance_score),
+            status=self._score_to_status(balance_score),
+            current_value=round(data.get("sum_calories", 0) / max(data["active_days"], 1), 1),
+            target_value=100.0,
+            unit="分", description=balance_desc
+        ))
+
+        # 维度2: 运动规律
+        exercise_ratio = data["days_with_exercise"] / max(data["total_days"], 1)
+        target_exercise_ratio = 0.7  # 建议70%的天数有运动
+        if data["days_with_exercise"] == 0:
+            ex_score = 20.0
+            ex_desc = "暂无运动记录"
+            suggestions.append("建议保持规律运动习惯，每周至少运动5天")
+        else:
+            ex_score = min(100.0, (exercise_ratio / target_exercise_ratio) * 100)
+            ex_desc = f"过去{data['total_days']}天中{data['days_with_exercise']}天有运动记录"
+            if exercise_ratio < 0.5:
+                suggestions.append("运动频率偏低，建议增加运动天数")
+        dims.append(GoalDimension(
+            name="运动规律", score=self._clamp_score(ex_score),
+            status=self._score_to_status(ex_score),
+            current_value=round(exercise_ratio * 100, 1),
+            target_value=round(target_exercise_ratio * 100, 1),
+            unit="%", description=ex_desc
+        ))
+
+        # 维度3: 饮食规律
+        diet_ratio = data["days_with_diet"] / max(data["total_days"], 1)
+        target_diet_ratio = 0.85
+        if data["days_with_diet"] == 0:
+            diet_score = 20.0
+            diet_desc = "暂无饮食记录"
+            suggestions.append("建议坚持记录每日饮食，有助于管理健康")
+        else:
+            diet_score = min(100.0, (diet_ratio / target_diet_ratio) * 100)
+            diet_desc = f"过去{data['total_days']}天中{data['days_with_diet']}天有饮食记录"
+        dims.append(GoalDimension(
+            name="饮食规律", score=self._clamp_score(diet_score),
+            status=self._score_to_status(diet_score),
+            current_value=round(diet_ratio * 100, 1),
+            target_value=round(target_diet_ratio * 100, 1),
+            unit="%", description=diet_desc
+        ))
+
+        return dims, suggestions
+
+    def get_goal_progress(
+        self,
+        db: Session,
+        user_id: int,
+        days: int = 7
+    ) -> GoalProgressData:
+        """
+        获取用户健康目标达成率（Phase 36）
+
+        根据用户设置的健康目标，统计指定天数内的饮食和运动数据，
+        计算各维度达成率和综合得分。
+
+        Args:
+            db: 数据库会话
+            user_id: 用户ID
+            days: 统计天数（默认7天）
+
+        Returns:
+            GoalProgressData: 目标达成率数据
+        """
+        today = date.today()
+        start_date = today - timedelta(days=max(days - 1, 0))
+        end_date = today
+
+        # 获取用户信息
+        user = db.query(User).filter(User.id == user_id).first()
+        health_goal = (user.health_goal if user and user.health_goal else "balanced")
+        if health_goal not in HEALTH_GOAL_LABELS:
+            health_goal = "balanced"
+        health_goal_label = HEALTH_GOAL_LABELS[health_goal]
+
+        # 收集统计数据
+        data = self._gather_period_data(db, user_id, start_date, end_date)
+
+        # 计算连续记录天数
+        streak = self._calc_streak_days(db, user_id, end_date)
+
+        # 根据目标类型评估
+        evaluators = {
+            "reduce_fat": self._evaluate_reduce_fat,
+            "gain_muscle": self._evaluate_gain_muscle,
+            "control_sugar": self._evaluate_control_sugar,
+            "balanced": self._evaluate_balanced,
+        }
+        evaluator = evaluators.get(health_goal, self._evaluate_balanced)
+        dimensions, suggestions = evaluator(data, user or User(
+            id=user_id, nickname="", password="",
+            weight=70.0, height=170.0, age=30, gender="male"
+        ))
+
+        # 通用建议
+        if streak == 0:
+            suggestions.append("开始记录你的饮食和运动吧，坚持是健康的关键！")
+        elif streak >= 7:
+            suggestions.append(f"已连续记录{streak}天，非常棒，继续保持！")
+
+        # 计算综合得分（各维度加权平均）
+        if dimensions:
+            overall_score = sum(d.score for d in dimensions) / len(dimensions)
+        else:
+            overall_score = 0.0
+        overall_score = self._clamp_score(overall_score)
+
+        return GoalProgressData(
+            user_id=user_id,
+            health_goal=health_goal,
+            health_goal_label=health_goal_label,
+            period_days=days,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            overall_score=overall_score,
+            overall_status=self._score_to_status(overall_score),
+            dimensions=dimensions,
+            suggestions=suggestions,
+            streak_days=streak
         )
 
 

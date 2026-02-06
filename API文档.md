@@ -48,6 +48,7 @@
 | **运动记录** | `/api/exercise/record/{record_id}` | GET | 查询运动记录详情 |
 | **运动记录** | `/api/exercise/record/{record_id}` | DELETE | 删除运动记录   |
 | **运动记录** | `/api/exercise/health`   | GET  | 运动记录服务健康检查 |
+| **统计** | `/api/stats/goal-progress`   | GET  | 健康目标达成率（Phase 36） |
 
 ---
 
@@ -2486,7 +2487,108 @@ GET http://localhost:8000/api/stats/nutrients/daily?userId=1&date=2026-02-05
 
 ---
 
-### 20. 新增运动记录 ⭐
+### 20. 健康目标达成率 ⭐（Phase 36）
+
+**接口地址**: `GET /api/stats/goal-progress`
+
+**接口描述**: 根据用户设置的健康目标，统计指定天数内的饮食和运动数据，计算各维度达成率和综合得分。支持减脂、增肌、控糖、均衡四种目标类型。
+
+**请求参数（Query）**:
+| 参数   | 类型 | 必填 | 说明                         |
+| ------ | ---- | ---- | ---------------------------- |
+| userId | int  | 是   | 用户ID（>0）                 |
+| days   | int  | 否   | 统计天数（1-90，默认7）      |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/goal-progress?userId=1&days=7
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "user_id": 1,
+    "health_goal": "reduce_fat",
+    "health_goal_label": "减脂",
+    "period_days": 7,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-07",
+    "overall_score": 75.0,
+    "overall_status": "good",
+    "dimensions": [
+      {
+        "name": "热量控制",
+        "score": 85.0,
+        "status": "good",
+        "current_value": 1600.0,
+        "target_value": 1756.0,
+        "unit": "kcal/天",
+        "description": "日均摄入1600kcal，建议1756kcal"
+      },
+      {
+        "name": "脂肪比例",
+        "score": 90.0,
+        "status": "excellent",
+        "current_value": 22.5,
+        "target_value": 30.0,
+        "unit": "%",
+        "description": "脂肪占比22.5%，在建议范围内"
+      },
+      {
+        "name": "运动消耗",
+        "score": 80.0,
+        "status": "good",
+        "current_value": 240.0,
+        "target_value": 300.0,
+        "unit": "kcal/天",
+        "description": "日均运动消耗240kcal，建议300kcal"
+      }
+    ],
+    "suggestions": [
+      "运动消耗不足，建议增加有氧运动频率和时长",
+      "已连续记录7天，非常棒，继续保持！"
+    ],
+    "streak_days": 7
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                       | 类型     | 说明                                            |
+| -------------------------- | -------- | ----------------------------------------------- |
+| data.user_id               | int      | 用户ID                                          |
+| data.health_goal           | string   | 健康目标类型                                    |
+| data.health_goal_label     | string   | 健康目标中文标签                                |
+| data.period_days           | int      | 统计天数                                        |
+| data.start_date            | string   | 统计起始日期                                    |
+| data.end_date              | string   | 统计结束日期                                    |
+| data.overall_score         | float    | 综合得分（0-100）                               |
+| data.overall_status        | string   | 综合状态：excellent/good/fair/poor              |
+| data.dimensions            | array    | 各维度评估详情                                  |
+| data.dimensions[].name     | string   | 维度名称                                        |
+| data.dimensions[].score    | float    | 维度得分（0-100）                               |
+| data.dimensions[].status   | string   | 维度状态：excellent/good/fair/poor              |
+| data.dimensions[].current_value | float | 当前指标值                                    |
+| data.dimensions[].target_value  | float | 目标指标值                                    |
+| data.dimensions[].unit     | string   | 指标单位                                        |
+| data.dimensions[].description | string | 维度描述说明                                  |
+| data.suggestions           | array    | 个性化建议列表                                  |
+| data.streak_days           | int      | 连续记录天数                                    |
+
+**各目标类型评估维度**:
+| 目标类型       | 维度1    | 维度2    | 维度3    |
+| -------------- | -------- | -------- | -------- |
+| reduce_fat（减脂） | 热量控制 | 脂肪比例 | 运动消耗 |
+| gain_muscle（增肌）| 蛋白质摄入 | 热量充足 | 运动消耗 |
+| control_sugar（控糖）| 碳水比例 | 热量控制 | 运动辅助 |
+| balanced（均衡）  | 营养均衡 | 运动规律 | 饮食规律 |
+
+---
+
+### 21. 新增运动记录 ⭐
 
 **接口地址**: `POST /api/exercise/record`
 
@@ -2769,6 +2871,12 @@ DELETE http://localhost:8000/api/exercise/record/1?userId=1
 ---
 
 ## 更新日志
+
+### v1.8.0 (2026-02-06)
+- ✅ 添加健康目标达成率接口 `GET /api/stats/goal-progress`（Phase 36）
+- ✅ 支持四种目标类型：减脂、增肌、控糖、均衡
+- ✅ 多维度评估：热量控制、营养素比例、运动消耗等
+- ✅ 返回综合得分、各维度详情、个性化建议、连续记录天数
 
 ### v1.7.0 (2026-02-06)
 - ✅ 饮食-运动数据联动（Phase 26）

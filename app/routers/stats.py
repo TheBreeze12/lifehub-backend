@@ -3,11 +3,13 @@
 Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
 Phase 26: 饮食-运动数据联动
+Phase 36: 健康目标达成率
 
 提供每日/每周热量统计接口：
 - GET /api/stats/calories/daily - 每日热量统计（含运动记录联动、热量缺口、达成率）
 - GET /api/stats/calories/weekly - 每周热量统计
 - GET /api/stats/nutrients/daily - 每日营养素统计（Phase 16）
+- GET /api/stats/goal-progress - 健康目标达成率（Phase 36）
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
@@ -19,7 +21,9 @@ from app.models.stats import (
     DailyCalorieStatsResponse,
     WeeklyCalorieStatsResponse,
     DailyNutrientStatsResponse,
-    DailyNutrientStats
+    DailyNutrientStats,
+    GoalProgressResponse,
+    GoalProgressData,
 )
 from app.db_models.user import User
 
@@ -301,4 +305,76 @@ async def get_daily_nutrient_stats(
         code=200,
         message="获取成功",
         data=stats
+    )
+
+
+# ============== Phase 36: 健康目标达成率接口 ==============
+
+@router.get("/goal-progress", response_model=GoalProgressResponse)
+async def get_goal_progress(
+    userId: int = Query(..., description="用户ID", gt=0),
+    days: int = Query(7, description="统计天数（默认7天）", ge=1, le=90),
+    db: Session = Depends(get_db)
+):
+    """
+    获取健康目标达成率（Phase 36）
+    
+    根据用户设置的健康目标，统计指定天数内的饮食和运动数据，
+    计算各维度达成率和综合得分。
+    
+    支持的健康目标类型：
+    - **reduce_fat（减脂）**: 评估热量控制、脂肪比例、运动消耗
+    - **gain_muscle（增肌）**: 评估蛋白质摄入、热量充足、运动消耗
+    - **control_sugar（控糖）**: 评估碳水比例、热量控制、运动辅助
+    - **balanced（均衡）**: 评估营养均衡、运动规律、饮食规律
+    
+    返回数据包含：
+    - **overall_score**: 综合得分（0-100）
+    - **overall_status**: 综合状态（excellent/good/fair/poor）
+    - **dimensions**: 各维度详细评分
+    - **suggestions**: 个性化建议
+    - **streak_days**: 连续记录天数
+    
+    Args:
+        userId: 用户ID
+        days: 统计天数（1-90，默认7）
+        
+    Returns:
+        GoalProgressResponse: 健康目标达成率响应
+    """
+    # 验证用户是否存在
+    user = db.query(User).filter(User.id == userId).first()
+    if not user:
+        # 返回默认数据而非404
+        from datetime import timedelta
+        from app.models.stats import HEALTH_GOAL_LABELS
+        from datetime import date as date_cls
+        today = date_cls.today()
+        start = today - timedelta(days=max(days - 1, 0))
+        empty_data = GoalProgressData(
+            user_id=userId,
+            health_goal="balanced",
+            health_goal_label="均衡",
+            period_days=days,
+            start_date=start.isoformat(),
+            end_date=today.isoformat(),
+            overall_score=0.0,
+            overall_status="poor",
+            dimensions=[],
+            suggestions=["用户不存在或尚未设置健康目标"],
+            streak_days=0
+        )
+        return GoalProgressResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_data
+        )
+    
+    # 获取目标达成率数据
+    progress = stats_service.get_goal_progress(db, userId, days)
+    
+    return GoalProgressResponse(
+        code=200,
+        message="获取成功",
+        data=progress
     )

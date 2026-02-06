@@ -365,3 +365,108 @@ class DailyNutrientStatsResponse(BaseModel):
             }
         }
 
+
+# ============== Phase 36: 健康目标达成率模型 ==============
+
+# 健康目标中文标签
+HEALTH_GOAL_LABELS = {
+    "reduce_fat": "减脂",
+    "gain_muscle": "增肌",
+    "control_sugar": "控糖",
+    "balanced": "均衡",
+}
+
+
+class GoalDimension(BaseModel):
+    """健康目标评估维度"""
+    name: str = Field(..., description="维度名称（如：热量控制、蛋白质摄入）")
+    score: float = Field(..., description="维度得分（0-100）")
+    status: str = Field(..., description="状态：excellent/good/fair/poor")
+    current_value: float = Field(..., description="当前指标值")
+    target_value: float = Field(..., description="目标指标值")
+    unit: str = Field(..., description="指标单位")
+    description: str = Field(..., description="维度描述说明")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "热量控制",
+                "score": 85.0,
+                "status": "good",
+                "current_value": 1800.0,
+                "target_value": 2000.0,
+                "unit": "kcal/天",
+                "description": "日均摄入热量在合理范围内"
+            }
+        }
+
+
+class GoalProgressData(BaseModel):
+    """健康目标达成率数据"""
+    user_id: int = Field(..., description="用户ID")
+    health_goal: str = Field(..., description="健康目标：reduce_fat/gain_muscle/control_sugar/balanced")
+    health_goal_label: str = Field(..., description="健康目标中文标签")
+    period_days: int = Field(..., description="统计天数")
+    start_date: str = Field(..., description="统计起始日期（YYYY-MM-DD）")
+    end_date: str = Field(..., description="统计结束日期（YYYY-MM-DD）")
+    overall_score: float = Field(..., description="综合得分（0-100）")
+    overall_status: str = Field(..., description="综合状态：excellent/good/fair/poor")
+    dimensions: list[GoalDimension] = Field(default_factory=list, description="各维度评估")
+    suggestions: list[str] = Field(default_factory=list, description="个性化建议列表")
+    streak_days: int = Field(0, description="连续记录天数（从今天往前）")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": 1,
+                "health_goal": "reduce_fat",
+                "health_goal_label": "减脂",
+                "period_days": 7,
+                "start_date": "2026-02-01",
+                "end_date": "2026-02-07",
+                "overall_score": 75.0,
+                "overall_status": "good",
+                "dimensions": [
+                    {
+                        "name": "热量控制",
+                        "score": 85.0,
+                        "status": "good",
+                        "current_value": 1800.0,
+                        "target_value": 2000.0,
+                        "unit": "kcal/天",
+                        "description": "日均摄入热量在合理范围内"
+                    }
+                ],
+                "suggestions": ["继续保持每日热量缺口", "建议增加有氧运动时间"],
+                "streak_days": 5
+            }
+        }
+
+
+class GoalProgressResponse(BaseModel):
+    """健康目标达成率响应"""
+    code: int = Field(200, description="状态码，200表示成功")
+    message: str = Field("获取成功", description="消息")
+    data: GoalProgressData = Field(..., description="目标达成率数据")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "获取成功",
+                "data": {
+                    "user_id": 1,
+                    "health_goal": "reduce_fat",
+                    "health_goal_label": "减脂",
+                    "period_days": 7,
+                    "start_date": "2026-02-01",
+                    "end_date": "2026-02-07",
+                    "overall_score": 75.0,
+                    "overall_status": "good",
+                    "dimensions": [],
+                    "suggestions": ["继续保持"],
+                    "streak_days": 5
+                }
+            }
+        }
+
