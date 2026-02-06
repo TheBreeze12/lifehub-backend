@@ -2,6 +2,7 @@
 统计相关数据模型
 Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
+Phase 26: 饮食-运动数据联动（新增字段）
 """
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -31,13 +32,25 @@ class DailyCalorieStats(BaseModel):
     intake_calories: float = Field(0.0, description="摄入热量（kcal）")
     meal_count: int = Field(0, description="餐次数量")
     
-    # 消耗相关
-    burn_calories: float = Field(0.0, description="消耗热量（kcal）")
-    exercise_count: int = Field(0, description="运动项目数量")
-    exercise_duration: int = Field(0, description="运动总时长（分钟）")
+    # 消耗相关（有效消耗：有运动记录时用实际值，否则用计划值）
+    burn_calories: float = Field(0.0, description="有效消耗热量（kcal）")
+    exercise_count: int = Field(0, description="运动计划项目数量")
+    exercise_duration: int = Field(0, description="运动计划总时长（分钟）")
+    
+    # Phase 26新增：计划消耗 vs 实际消耗
+    planned_burn_calories: float = Field(0.0, description="计划消耗热量（来自运动计划，kcal）")
+    actual_burn_calories: float = Field(0.0, description="实际消耗热量（来自运动记录，kcal）")
+    actual_exercise_count: int = Field(0, description="实际运动记录数量")
+    actual_exercise_duration: int = Field(0, description="实际运动总时长（分钟）")
     
     # 净热量
-    net_calories: float = Field(0.0, description="净热量（摄入-消耗）")
+    net_calories: float = Field(0.0, description="净热量（摄入-有效消耗）")
+    
+    # Phase 26新增：热量缺口与达成率
+    calorie_deficit: float = Field(0.0, description="热量缺口（摄入-有效消耗，正值表示热量盈余）")
+    goal_achievement_rate: Optional[float] = Field(
+        None, description="目标达成率（%），实际消耗/计划消耗×100，无计划时为None"
+    )
     
     # 餐次分类统计（可选）
     meal_breakdown: Optional[dict] = Field(None, description="餐次分类统计")
@@ -52,7 +65,13 @@ class DailyCalorieStats(BaseModel):
                 "burn_calories": 500.0,
                 "exercise_count": 2,
                 "exercise_duration": 60,
-                "net_calories": 1300.0,
+                "planned_burn_calories": 500.0,
+                "actual_burn_calories": 450.0,
+                "actual_exercise_count": 2,
+                "actual_exercise_duration": 55,
+                "net_calories": 1350.0,
+                "calorie_deficit": 1350.0,
+                "goal_achievement_rate": 90.0,
                 "meal_breakdown": {
                     "breakfast": 400.0,
                     "lunch": 700.0,
@@ -144,7 +163,13 @@ class DailyCalorieStatsResponse(BaseModel):
                     "burn_calories": 500.0,
                     "exercise_count": 2,
                     "exercise_duration": 60,
-                    "net_calories": 1300.0
+                    "planned_burn_calories": 500.0,
+                    "actual_burn_calories": 450.0,
+                    "actual_exercise_count": 2,
+                    "actual_exercise_duration": 55,
+                    "net_calories": 1350.0,
+                    "calorie_deficit": 1350.0,
+                    "goal_achievement_rate": 90.0
                 }
             }
         }

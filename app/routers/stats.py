@@ -2,9 +2,10 @@
 统计相关API路由
 Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
+Phase 26: 饮食-运动数据联动
 
 提供每日/每周热量统计接口：
-- GET /api/stats/calories/daily - 每日热量统计
+- GET /api/stats/calories/daily - 每日热量统计（含运动记录联动、热量缺口、达成率）
 - GET /api/stats/calories/weekly - 每周热量统计
 - GET /api/stats/nutrients/daily - 每日营养素统计（Phase 16）
 """
@@ -54,14 +55,19 @@ async def get_daily_calorie_stats(
     db: Session = Depends(get_db)
 ):
     """
-    获取每日热量统计
+    获取每日热量统计（Phase 26增强）
     
     统计指定用户在指定日期的热量摄入和消耗情况：
     - **intake_calories**: 摄入热量（来自饮食记录）
-    - **burn_calories**: 消耗热量（来自运动计划）
-    - **net_calories**: 净热量（摄入-消耗）
+    - **burn_calories**: 有效消耗热量（有运动记录时用实际值，否则用计划值）
+    - **planned_burn_calories**: 计划消耗热量（来自运动计划）
+    - **actual_burn_calories**: 实际消耗热量（来自运动记录）
+    - **net_calories**: 净热量（摄入-有效消耗）
+    - **calorie_deficit**: 热量缺口（摄入-有效消耗）
+    - **goal_achievement_rate**: 目标达成率（实际消耗/计划消耗×100）
     - **meal_count**: 餐次数量
-    - **exercise_count**: 运动项目数量
+    - **exercise_count**: 运动计划项目数量
+    - **actual_exercise_count**: 实际运动记录数量
     - **meal_breakdown**: 餐次分类统计（早餐/午餐/晚餐/加餐）
     
     Args:
@@ -87,7 +93,13 @@ async def get_daily_calorie_stats(
             burn_calories=0.0,
             exercise_count=0,
             exercise_duration=0,
+            planned_burn_calories=0.0,
+            actual_burn_calories=0.0,
+            actual_exercise_count=0,
+            actual_exercise_duration=0,
             net_calories=0.0,
+            calorie_deficit=0.0,
+            goal_achievement_rate=None,
             meal_breakdown=None
         )
         return DailyCalorieStatsResponse(

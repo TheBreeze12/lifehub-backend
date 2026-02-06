@@ -2093,7 +2093,7 @@ curl -X POST http://localhost:8000/api/food/meal/after/1 \
 
 **接口地址**: `GET /api/stats/calories/daily`
 
-**接口描述**: 获取指定用户在指定日期的热量摄入和消耗统计
+**接口描述**: 获取指定用户在指定日期的热量摄入和消耗统计。Phase 26新增饮食-运动数据联动：关联运动记录（ExerciseRecord），区分计划消耗与实际消耗，计算热量缺口和目标达成率。
 
 **请求参数**:
 | 参数名 | 类型   | 必填 | 说明                     |
@@ -2116,10 +2116,16 @@ GET http://localhost:8000/api/stats/calories/daily?userId=1&date=2026-02-04
     "user_id": 1,
     "intake_calories": 1800.0,
     "meal_count": 3,
-    "burn_calories": 500.0,
+    "burn_calories": 450.0,
     "exercise_count": 2,
     "exercise_duration": 60,
-    "net_calories": 1300.0,
+    "planned_burn_calories": 500.0,
+    "actual_burn_calories": 450.0,
+    "actual_exercise_count": 2,
+    "actual_exercise_duration": 55,
+    "net_calories": 1350.0,
+    "calorie_deficit": 1350.0,
+    "goal_achievement_rate": 90.0,
     "meal_breakdown": {
       "breakfast": 400.0,
       "lunch": 700.0,
@@ -2131,19 +2137,30 @@ GET http://localhost:8000/api/stats/calories/daily?userId=1&date=2026-02-04
 ```
 
 **响应字段说明**:
-| 字段                       | 类型   | 说明                                   |
-| -------------------------- | ------ | -------------------------------------- |
-| code                       | int    | 状态码，200表示成功                    |
-| message                    | string | 响应消息                               |
-| data.date                  | string | 统计日期                               |
-| data.user_id               | int    | 用户ID                                 |
-| data.intake_calories       | float  | 摄入热量（kcal，来自饮食记录）         |
-| data.meal_count            | int    | 餐次数量                               |
-| data.burn_calories         | float  | 消耗热量（kcal，来自运动计划）         |
-| data.exercise_count        | int    | 运动项目数量                           |
-| data.exercise_duration     | int    | 运动总时长（分钟）                     |
-| data.net_calories          | float  | 净热量（摄入-消耗）                    |
-| data.meal_breakdown        | object | 餐次分类统计（早餐/午餐/晚餐/加餐）    |
+| 字段                            | 类型        | 说明                                                                 |
+| ------------------------------- | ----------- | -------------------------------------------------------------------- |
+| code                            | int         | 状态码，200表示成功                                                  |
+| message                         | string      | 响应消息                                                             |
+| data.date                       | string      | 统计日期                                                             |
+| data.user_id                    | int         | 用户ID                                                               |
+| data.intake_calories            | float       | 摄入热量（kcal，来自饮食记录）                                       |
+| data.meal_count                 | int         | 餐次数量                                                             |
+| data.burn_calories              | float       | 有效消耗热量（kcal，有运动记录时用实际值，否则用计划值）             |
+| data.exercise_count             | int         | 运动计划项目数量                                                     |
+| data.exercise_duration          | int         | 运动计划总时长（分钟）                                               |
+| data.planned_burn_calories      | float       | 计划消耗热量（kcal，来自运动计划TripItem）⭐Phase 26新增             |
+| data.actual_burn_calories       | float       | 实际消耗热量（kcal，来自运动记录ExerciseRecord）⭐Phase 26新增       |
+| data.actual_exercise_count      | int         | 实际运动记录数量 ⭐Phase 26新增                                      |
+| data.actual_exercise_duration   | int         | 实际运动总时长（分钟）⭐Phase 26新增                                 |
+| data.net_calories               | float       | 净热量（摄入-有效消耗）                                              |
+| data.calorie_deficit            | float       | 热量缺口（摄入-有效消耗，正值=盈余，负值=亏缺）⭐Phase 26新增       |
+| data.goal_achievement_rate      | float\|null | 目标达成率（%），实际消耗/计划消耗×100，无计划时为null ⭐Phase 26新增 |
+| data.meal_breakdown             | object      | 餐次分类统计（早餐/午餐/晚餐/加餐）                                 |
+
+**burn_calories 计算逻辑**（Phase 26）:
+- 当日有运动记录（ExerciseRecord）时：`burn_calories = actual_burn_calories`
+- 当日无运动记录但有运动计划时：`burn_calories = planned_burn_calories`
+- 都没有时：`burn_calories = 0`
 
 **错误响应**:
 - 日期格式错误（HTTP 400）:
@@ -2626,6 +2643,13 @@ DELETE http://localhost:8000/api/exercise/record/1?userId=1
 ---
 
 ## 更新日志
+
+### v1.7.0 (2026-02-06)
+- ✅ 饮食-运动数据联动（Phase 26）
+- ✅ 每日热量统计接口关联运动记录（ExerciseRecord），区分计划消耗与实际消耗
+- ✅ 新增字段：`planned_burn_calories`、`actual_burn_calories`、`actual_exercise_count`、`actual_exercise_duration`
+- ✅ 新增字段：`calorie_deficit`（热量缺口）、`goal_achievement_rate`（目标达成率）
+- ✅ `burn_calories` 智能选择：有运动记录时用实际值，否则用计划值
 
 ### v1.6.0 (2026-02-06)
 - ✅ 添加运动记录数据模型 `ExerciseRecord`（Phase 25）

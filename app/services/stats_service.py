@@ -2,11 +2,14 @@
 统计服务
 Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
+Phase 26: 饮食-运动数据联动
 
 提供每日/每周热量统计功能：
 - 统计饮食记录的摄入热量
-- 统计运动计划的消耗热量
-- 计算净热量（摄入-消耗）
+- 统计运动计划的计划消耗热量
+- 统计运动记录的实际消耗热量（Phase 26新增）
+- 计算净热量（摄入-有效消耗）
+- 计算实际热量缺口和目标达成率（Phase 26新增）
 - 统计营养素（蛋白质、脂肪、碳水）摄入比例
 - 与膳食指南建议值对比
 """
@@ -18,6 +21,7 @@ from typing import Optional
 from app.db_models.diet_record import DietRecord
 from app.db_models.trip_plan import TripPlan
 from app.db_models.trip_item import TripItem
+from app.db_models.exercise_record import ExerciseRecord
 from app.models.stats import (
     DailyCalorieStats, WeeklyCalorieStats, DailyBreakdown,
     DailyNutrientStats, NutrientComparison, GuidelinesComparison,
@@ -82,7 +86,7 @@ class StatsService:
             if meal_type in meal_breakdown:
                 meal_breakdown[meal_type] += calories
         
-        # 查询当日运动计划
+        # 查询当日运动计划（计划消耗）
         trip_plans = db.query(TripPlan).filter(
             and_(
                 TripPlan.user_id == user_id,
@@ -91,27 +95,55 @@ class StatsService:
             )
         ).all()
         
-        # 计算消耗热量
-        burn_calories = 0.0
+        # 计算计划消耗热量
+        planned_burn_calories = 0.0
         exercise_count = 0
         exercise_duration = 0
         
         for trip in trip_plans:
-            # 查询运动项目
             items = db.query(TripItem).filter(
                 TripItem.trip_id == trip.id
             ).all()
             
             for item in items:
-                # cost 字段现用于存储卡路里消耗
                 if item.cost:
-                    burn_calories += item.cost
+                    planned_burn_calories += item.cost
                 exercise_count += 1
                 if item.duration:
                     exercise_duration += item.duration
         
-        # 计算净热量
+        # Phase 26: 查询当日运动记录（实际消耗）
+        exercise_records = db.query(ExerciseRecord).filter(
+            and_(
+                ExerciseRecord.user_id == user_id,
+                ExerciseRecord.exercise_date == target_date
+            )
+        ).all()
+        
+        actual_burn_calories = 0.0
+        actual_exercise_count = len(exercise_records)
+        actual_exercise_duration = 0
+        
+        for record in exercise_records:
+            actual_burn_calories += record.actual_calories or 0.0
+            actual_exercise_duration += record.actual_duration or 0
+        
+        # 有效消耗：有运动记录时用实际值，否则用计划值
+        if actual_exercise_count > 0:
+            burn_calories = actual_burn_calories
+        else:
+            burn_calories = planned_burn_calories
+        
+        # 计算净热量和热量缺口
         net_calories = intake_calories - burn_calories
+        calorie_deficit = net_calories  # 正值=热量盈余，负值=热量亏缺
+        
+        # 计算目标达成率
+        goal_achievement_rate = None
+        if planned_burn_calories > 0:
+            goal_achievement_rate = round(
+                (actual_burn_calories / planned_burn_calories) * 100, 1
+            )
         
         return DailyCalorieStats(
             date=target_date.isoformat(),
@@ -121,7 +153,13 @@ class StatsService:
             burn_calories=round(burn_calories, 2),
             exercise_count=exercise_count,
             exercise_duration=exercise_duration,
+            planned_burn_calories=round(planned_burn_calories, 2),
+            actual_burn_calories=round(actual_burn_calories, 2),
+            actual_exercise_count=actual_exercise_count,
+            actual_exercise_duration=actual_exercise_duration,
             net_calories=round(net_calories, 2),
+            calorie_deficit=round(calorie_deficit, 2),
+            goal_achievement_rate=goal_achievement_rate,
             meal_breakdown=meal_breakdown
         )
     
