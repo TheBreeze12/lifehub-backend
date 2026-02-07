@@ -24,6 +24,7 @@
 | **餐饮** | `/api/food/diet/{record_id}`   | DELETE | 删除饮食记录     |
 | **餐饮** | `/api/food/allergen/check`     | POST | 检测菜品过敏原     |
 | **餐饮** | `/api/food/allergen/categories`| GET  | 获取过敏原类别列表 |
+| **餐饮** | `/api/food/recommend`          | GET  | 个性化菜品推荐     |
 | **餐饮** | `/api/food/meal/before`        | POST | 上传餐前图片       |
 | **餐饮** | `/api/food/meal/after/{comparison_id}` | POST | 上传餐后图片并计算净摄入 |
 | **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
@@ -846,6 +847,100 @@ GET http://localhost:8000/api/food/allergen/categories
 | data[].name       | string | 过敏原中文名称   |
 | data[].name_en    | string | 过敏原英文名称   |
 | data[].description| string | 过敏原描述       |
+
+---
+
+### 9.5 个性化菜品推荐 ⭐（Phase 41）
+
+**接口地址**: `GET /api/food/recommend`
+
+**接口描述**: 基于用户健康目标、热量配额、历史偏好的个性化菜品推荐
+
+**推荐算法**:
+- 健康目标匹配（减脂→低热量高蛋白，增肌→高蛋白足够热量，控糖→低碳水，均衡→营养均衡）
+- 热量配额过滤（根据当日剩余热量推荐合适热量菜品）
+- 历史偏好排序（根据用户30天内饮食记录加分）
+- 过敏原过滤（自动排除含用户过敏原的菜品）
+- 多样性保证（今天已吃过的菜品降权）
+
+**请求参数**:
+| 参数名    | 类型   | 必填 | 说明                                                         |
+| --------- | ------ | ---- | ------------------------------------------------------------ |
+| user_id   | int    | 是   | 用户ID                                                       |
+| meal_type | string | 否   | 餐次：breakfast/lunch/dinner/snack，默认lunch，支持中文      |
+| limit     | int    | 否   | 返回推荐数量，默认5                                          |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/food/recommend?user_id=1&meal_type=lunch
+GET http://localhost:8000/api/food/recommend?user_id=1&meal_type=breakfast&limit=3
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "推荐成功",
+  "data": {
+    "user_id": 1,
+    "meal_type": "lunch",
+    "remaining_calories": 1224.06,
+    "daily_calorie_target": 1724.06,
+    "health_goal": "reduce_fat",
+    "health_goal_label": "减脂",
+    "recommendations": [
+      {
+        "food_name": "清蒸鲈鱼",
+        "calories": 105.0,
+        "protein": 19.5,
+        "fat": 3.0,
+        "carbs": 0.5,
+        "score": 92.5,
+        "reason": "热量仅105千卡，适合减脂；蛋白质19.5g，有助于维持肌肉；低脂肪，减少脂肪摄入；在您的剩余热量配额（1224kcal）内。",
+        "tags": ["高蛋白", "低脂肪", "低热量"]
+      },
+      {
+        "food_name": "鸡胸肉沙拉",
+        "calories": 120.0,
+        "protein": 22.0,
+        "fat": 3.0,
+        "carbs": 4.0,
+        "score": 88.0,
+        "reason": "高蛋白低脂肪，适合减脂目标。",
+        "tags": ["高蛋白", "低脂肪", "低碳水"]
+      }
+    ]
+  }
+}
+```
+
+**字段说明**:
+| 字段名                           | 类型   | 说明                         |
+| -------------------------------- | ------ | ---------------------------- |
+| data.user_id                     | int    | 用户ID                       |
+| data.meal_type                   | string | 餐次（英文）                 |
+| data.remaining_calories          | float  | 当日剩余热量配额（kcal）     |
+| data.daily_calorie_target        | float  | 每日热量目标（kcal）         |
+| data.health_goal                 | string | 健康目标代码                 |
+| data.health_goal_label           | string | 健康目标中文标签             |
+| data.recommendations             | array  | 推荐菜品列表                 |
+| data.recommendations[].food_name | string | 菜品名称                     |
+| data.recommendations[].calories  | float  | 热量（千卡/100g）            |
+| data.recommendations[].protein   | float  | 蛋白质（克/100g）            |
+| data.recommendations[].fat       | float  | 脂肪（克/100g）              |
+| data.recommendations[].carbs     | float  | 碳水化合物（克/100g）        |
+| data.recommendations[].score     | float  | 综合推荐评分（0-100）        |
+| data.recommendations[].reason    | string | 推荐理由                     |
+| data.recommendations[].tags      | array  | 标签（如高蛋白、低脂肪等）   |
+
+**错误响应**:
+- 用户不存在（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，user_id: 9999"
+}
+```
+- 缺少user_id参数（HTTP 422）: 验证错误详情
 
 ---
 

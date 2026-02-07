@@ -20,7 +20,8 @@ from app.models.food import (
     ApiResponse,
     AllergenCheckRequest,
     AllergenCheckResponse,
-    AllergenCategoriesResponse
+    AllergenCategoriesResponse,
+    RecommendationResponse,
 )
 from app.models.meal_comparison import BeforeMealUploadResponse, AfterMealUploadResponse
 from app.services.meal_comparison_service import meal_comparison_service
@@ -32,6 +33,7 @@ import json as json_module
 from app.db_models.diet_record import DietRecord
 from app.services.ai_service import AIService
 from app.services.allergen_service import allergen_service
+from app.services.recommendation_service import get_recommendation_service
 from app.database import get_db
 from app.db_models.user import User
 from app.db_models.menu_recognition import MenuRecognition
@@ -544,6 +546,53 @@ async def get_allergen_categories():
     except Exception as e:
         print(f"获取过敏原类别失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+# ==================== Phase 41: 个性化菜品推荐接口 ====================
+
+@router.get("/recommend", response_model=RecommendationResponse)
+async def get_food_recommendations(
+    user_id: int,
+    meal_type: str = "lunch",
+    limit: int = 5,
+    db: Session = Depends(get_db)
+):
+    """
+    获取个性化菜品推荐
+    
+    基于用户健康目标、热量配额、历史偏好的多因子推荐算法：
+    - 健康目标匹配（减脂/增肌/控糖/均衡）
+    - 热量配额过滤（根据当日剩余热量）
+    - 历史偏好排序（根据用户饮食记录）
+    - 过敏原过滤（自动排除含用户过敏原的菜品）
+    - 多样性保证（今天已吃过的菜品降权）
+    
+    - **user_id**: 用户ID（必填）
+    - **meal_type**: 餐次（breakfast/lunch/dinner/snack，默认lunch）
+    - **limit**: 返回推荐数量（默认5）
+    """
+    try:
+        recommendation_service = get_recommendation_service()
+        result = recommendation_service.get_recommendations(
+            db=db,
+            user_id=user_id,
+            meal_type=meal_type,
+            limit=limit
+        )
+        
+        print(f"✓ 用户 {user_id} 的{meal_type}推荐完成，共 {len(result.recommendations)} 道菜品")
+        
+        return RecommendationResponse(
+            code=200,
+            message="推荐成功",
+            data=result
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"个性化推荐失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"推荐失败: {str(e)}")
 
 
 # ==================== 餐前餐后对比接口 (Phase 11) ====================
