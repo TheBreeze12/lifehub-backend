@@ -13,7 +13,10 @@ from app.models.user import (
     LoginResponse,
     TokenInfo,
     RefreshTokenRequest,
-    RefreshTokenResponse
+    RefreshTokenResponse,
+    DataForgetResponse,
+    DataForgetData,
+    DeletedCounts
 )
 from app.database import get_db
 from app.db_models.user import User
@@ -429,4 +432,61 @@ async def register_user(
         raise HTTPException(
             status_code=500,
             detail=f"用户注册失败: {str(e)}"
+        )
+
+
+@router.delete("/data", response_model=DataForgetResponse)
+async def delete_user_data(
+    userId: int,
+    db: Session = Depends(get_db)
+):
+    """
+    一键"遗忘"功能 - 完全删除用户所有数据（Phase 55）
+    
+    级联删除以下数据：
+    - 饮食记录（diet_record）
+    - 运动记录（exercise_record）
+    - 餐前餐后对比（meal_comparison）
+    - 菜单识别记录（menu_recognition）
+    - 运动计划及项目（trip_plan + trip_item）
+    - 用户偏好设置及用户本身（user）
+    
+    - **userId**: 用户ID，必须大于0
+    
+    ⚠️ 此操作不可逆，删除后数据无法恢复
+    """
+    if userId <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="无效的用户ID，必须大于0"
+        )
+
+    try:
+        from app.services.user_service import delete_user_data as service_delete
+
+        result = service_delete(db, userId)
+
+        return DataForgetResponse(
+            code=200,
+            message="数据删除成功",
+            data=DataForgetData(
+                user_id=result["user_id"],
+                nickname=result["nickname"],
+                deleted_counts=DeletedCounts(**result["deleted_counts"]),
+                total_deleted=result["total_deleted"]
+            )
+        )
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404,
+            detail=str(e)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"删除用户数据失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"删除用户数据失败: {str(e)}"
         )

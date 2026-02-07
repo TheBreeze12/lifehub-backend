@@ -232,3 +232,51 @@ class RefreshTokenResponse(BaseModel):
                 }
             }
         }
+
+
+# ============================================================
+# Phase 55: 一键"遗忘"功能 - 用户数据完全删除
+# ============================================================
+
+class DeletedCounts(BaseModel):
+    """各表删除数量统计"""
+    diet_records: int = Field(default=0, description="删除的饮食记录数")
+    exercise_records: int = Field(default=0, description="删除的运动记录数")
+    meal_comparisons: int = Field(default=0, description="删除的餐前餐后对比数")
+    menu_recognitions: int = Field(default=0, description="删除的菜单识别记录数")
+    trip_plans: int = Field(default=0, description="删除的运动计划数")
+
+
+class DataForgetData(BaseModel):
+    """数据删除结果"""
+    user_id: int = Field(..., description="被删除的用户ID")
+    nickname: str = Field(..., description="被删除用户的昵称")
+    deleted_counts: DeletedCounts = Field(..., description="各表删除数量")
+    total_deleted: int = Field(..., description="总计删除记录数")
+
+
+class DataForgetResponse(BaseModel):
+    """一键遗忘API响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    data: Optional[DataForgetData] = Field(None, description="删除结果数据")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "数据删除成功",
+                "data": {
+                    "user_id": 123,
+                    "nickname": "健康达人",
+                    "deleted_counts": {
+                        "diet_records": 15,
+                        "exercise_records": 8,
+                        "meal_comparisons": 3,
+                        "menu_recognitions": 5,
+                        "trip_plans": 4
+                    },
+                    "total_deleted": 35
+                }
+            }
+        }

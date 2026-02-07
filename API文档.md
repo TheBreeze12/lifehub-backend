@@ -35,6 +35,7 @@
 | **用户** | `/api/user/data`               | GET  | 用户登录（旧版）   |
 | **用户** | `/api/user/preferences`        | GET  | 获取用户偏好       |
 | **用户** | `/api/user/preferences`        | PUT  | 更新用户偏好       |
+| **用户** | `/api/user/data`               | DELETE | 一键遗忘（Phase 55） |
 | **运动** | `/api/trip/generate`           | POST | 生成运动计划       |
 | **运动** | `/api/trip/routes`             | POST | 生成帕累托最优路径 |
 | **运动** | `/api/trip/list`               | GET  | 获取运动计划列表   |
@@ -3225,7 +3226,72 @@ GET http://localhost:8000/api/stats/exercise-frequency?user_id=1&period=week
 
 ---
 
+### 22. 一键遗忘 - 删除用户所有数据（Phase 55）
+
+**接口地址**: `DELETE /api/user/data`
+
+**接口描述**: 完全删除用户所有云端数据，包括饮食记录、运动记录、运动计划、菜单识别记录、餐前餐后对比、用户账号及偏好设置。此操作不可逆。
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                   |
+| ------ | ---- | ---- | ---------------------- |
+| userId | int  | 是   | 用户ID，必须大于0         |
+
+**请求示例**:
+```bash
+DELETE http://localhost:8000/api/user/data?userId=123
+```
+
+**成功响应** (HTTP 200):
+```json
+{
+  "code": 200,
+  "message": "数据删除成功",
+  "data": {
+    "user_id": 123,
+    "nickname": "健康达人",
+    "deleted_counts": {
+      "diet_records": 15,
+      "exercise_records": 8,
+      "meal_comparisons": 3,
+      "menu_recognitions": 5,
+      "trip_plans": 4
+    },
+    "total_deleted": 35
+  }
+}
+```
+
+**字段说明**:
+| 字段名                        | 类型   | 说明                   |
+| ----------------------------- | ------ | ---------------------- |
+| data.user_id                  | int    | 被删除的用户ID         |
+| data.nickname                 | string | 被删除用户的昵称       |
+| data.deleted_counts           | object | 各表删除数量统计       |
+| data.total_deleted            | int    | 总计删除记录数         |
+
+**错误响应**:
+- 用户不存在（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，userId: 999"
+}
+```
+- 无效用户ID（HTTP 400）:
+```json
+{
+  "detail": "无效的用户ID，必须大于0"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.10.0 (2026-02-07)
+- ✅ 添加一键遗忘接口 `DELETE /api/user/data`（Phase 55）
+- ✅ 级联删除用户所有关联数据（饮食、运动、对比、识别、计划）
+- ✅ 返回删除统计信息
 
 ### v1.9.0 (2026-02-07)
 - ✅ 添加运动频率分析接口 `GET /api/stats/exercise-frequency`（Phase 51）
