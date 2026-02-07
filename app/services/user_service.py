@@ -1,6 +1,6 @@
 """
 用户数据服务层
-Phase 55: 一键"遗忘"功能 - 用户数据完全删除服务
+Phase 55: 一键"遗忘"功能 - 用户历史数据清除服务（保留账号）
 """
 
 import logging
@@ -29,7 +29,7 @@ def delete_user_data(db: Session, user_id: int) -> Dict[str, Any]:
     4. diet_record
     5. meal_comparison
     6. menu_recognition
-    7. user（最后删除用户本身）
+    7. 重置用户偏好设置（保留账号，不删除用户本身）
 
     Args:
         db: 数据库会话
@@ -92,8 +92,16 @@ def delete_user_data(db: Session, user_id: int) -> Dict[str, Any]:
         ).delete(synchronize_session=False)
         deleted_counts["menu_recognitions"] = menu_recognition_count
 
-        # 8. 删除用户本身
-        db.delete(user)
+        # 8. 重置用户偏好设置（保留账号，不删除用户本身）
+        user.health_goal = "balanced"
+        user.allergens = None
+        user.travel_preference = None
+        user.daily_budget = None
+        user.weight = None
+        user.height = None
+        user.age = None
+        user.gender = None
+        db.add(user)
 
         # 提交事务
         db.commit()

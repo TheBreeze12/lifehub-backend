@@ -447,7 +447,7 @@ async def delete_user_data(
     db: Session = Depends(get_db)
 ):
     """
-    一键"遗忘"功能 - 完全删除用户所有数据（Phase 55）
+    一键"遗忘"功能 - 删除用户所有历史数据，保留账号（Phase 55）
     
     级联删除以下数据：
     - 饮食记录（diet_record）
@@ -455,11 +455,11 @@ async def delete_user_data(
     - 餐前餐后对比（meal_comparison）
     - 菜单识别记录（menu_recognition）
     - 运动计划及项目（trip_plan + trip_item）
-    - 用户偏好设置及用户本身（user）
+    - 重置用户偏好设置（保留账号，不删除用户本身）
     
     - **userId**: 用户ID，必须大于0
     
-    ⚠️ 此操作不可逆，删除后数据无法恢复
+    ⚠️ 历史数据删除后不可恢复，但账号保留可继续使用
     """
     if userId <= 0:
         raise HTTPException(

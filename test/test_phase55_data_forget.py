@@ -1,10 +1,10 @@
 """
-Phase 55: 一键"遗忘"功能 - 用户数据完全删除接口测试
+Phase 55: 一键"遗忘"功能 - 用户历史数据清除接口测试（保留账号）
 
 测试 DELETE /api/user/data 接口，验证：
 1. 级联删除饮食记录、运动记录、餐前餐后对比、菜单识别、运动计划（含项目）
-2. 删除用户偏好设置
-3. 删除用户本身
+2. 重置用户偏好设置为默认值
+3. 保留用户账号（不删除用户本身）
 4. 各种边界情况（不存在的用户、无数据的用户、重复删除等）
 5. 响应格式与删除统计信息
 """
@@ -253,13 +253,25 @@ class TestDeleteUserDataAPI:
         assert data["data"]["deleted_counts"]["menu_recognitions"] == 2
         assert data["data"]["deleted_counts"]["trip_plans"] == 3
 
-        # 验证数据库中数据已删除
-        assert db_session.query(User).filter(User.id == user_id).first() is None
+        # 验证数据库中历史数据已删除
         assert db_session.query(DietRecord).filter(DietRecord.user_id == user_id).count() == 0
         assert db_session.query(TripPlan).filter(TripPlan.user_id == user_id).count() == 0
         assert db_session.query(ExerciseRecord).filter(ExerciseRecord.user_id == user_id).count() == 0
         assert db_session.query(MealComparison).filter(MealComparison.user_id == user_id).count() == 0
         assert db_session.query(MenuRecognition).filter(MenuRecognition.user_id == user_id).count() == 0
+
+        # 验证用户账号保留，偏好已重置
+        db_session.expire_all()
+        user_after = db_session.query(User).filter(User.id == user_id).first()
+        assert user_after is not None
+        assert user_after.health_goal == "balanced"
+        assert user_after.allergens is None
+        assert user_after.travel_preference is None
+        assert user_after.daily_budget is None
+        assert user_after.weight is None
+        assert user_after.height is None
+        assert user_after.age is None
+        assert user_after.gender is None
 
     def test_delete_user_not_found(self):
         """测试删除不存在的用户"""
@@ -284,8 +296,11 @@ class TestDeleteUserDataAPI:
         assert data["data"]["deleted_counts"]["menu_recognitions"] == 0
         assert data["data"]["deleted_counts"]["trip_plans"] == 0
 
-        # 用户也应该被删除
-        assert db_session.query(User).filter(User.id == user_id).first() is None
+        # 用户账号应保留，偏好已重置
+        db_session.expire_all()
+        user_after = db_session.query(User).filter(User.id == user_id).first()
+        assert user_after is not None
+        assert user_after.health_goal == "balanced"
 
     def test_delete_user_invalid_id_zero(self):
         """测试无效用户ID（0）"""
@@ -319,8 +334,9 @@ class TestDeleteUserDataAPI:
         response = client.request("DELETE", f"/api/user/data?userId={user1.id}")
         assert response.status_code == 200
 
-        # 验证用户1数据已删除
-        assert db_session.query(User).filter(User.id == user1.id).first() is None
+        # 验证用户1历史数据已删除，但账号保留
+        db_session.expire_all()
+        assert db_session.query(User).filter(User.id == user1.id).first() is not None
         assert db_session.query(DietRecord).filter(DietRecord.user_id == user1.id).count() == 0
 
         # 验证用户2数据完好
@@ -394,18 +410,21 @@ class TestDeleteUserDataAPI:
         expected_total = 3 + 2 + 1  # diet + exercise + meal_comparison
         assert data["data"]["total_deleted"] == expected_total
 
-    def test_double_delete_returns_404(self, db_session):
-        """测试重复删除同一用户返回404"""
+    def test_double_delete_succeeds(self, db_session):
+        """测试重复删除同一用户仍返回200（账号保留，只是无数据可删）"""
         user = create_test_user(db_session)
         user_id = user.id
+        create_test_diet_records(db_session, user_id, count=3)
 
         # 第一次删除成功
         response1 = client.request("DELETE", f"/api/user/data?userId={user_id}")
         assert response1.status_code == 200
+        assert response1.json()["data"]["total_deleted"] == 3
 
-        # 第二次删除应返回404
+        # 第二次删除仍成功，只是删除数为0
         response2 = client.request("DELETE", f"/api/user/data?userId={user_id}")
-        assert response2.status_code == 404
+        assert response2.status_code == 200
+        assert response2.json()["data"]["total_deleted"] == 0
 
     def test_delete_user_with_only_diet_records(self, db_session):
         """测试只有饮食记录的用户"""
