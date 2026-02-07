@@ -3372,3 +3372,9 @@ DELETE http://localhost:8000/api/user/data?userId=123
 - ✅ 实现用户偏好设置
 - ✅ 集成天气查询服务（Open-Meteo）
 
+### v1.4.6 (2026-02-07) Phase 56
+- ✅ 添加AI调用日志接口 `GET /api/user/ai-logs`
+- ✅ 添加AI调用统计接口 `GET /api/user/ai-logs/stats`
+- ✅ 自动记录每次AI调用到ai_call_log表
+- ✅ 支持按调用类型过滤、分页查询
+

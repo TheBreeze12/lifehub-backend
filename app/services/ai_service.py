@@ -4,11 +4,15 @@ AI服务 - 调用通义千问API（行程生成）和火山引擎豆包AI（菜�
 import os
 import json
 import base64
+import time
 import tempfile
+import logging
 from typing import List, Optional, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import dashscope
 from dashscope import Generation
+
+logger = logging.getLogger(__name__)
 
 # 尝试导入地理编码库（可选）
 try:
@@ -71,6 +75,42 @@ class AIService:
             except Exception as e:
                 print(f"警告: 地理编码服务初始化失败: {e}")
                 print("将使用经纬度坐标，不进行地理编码")
+
+    def _log_ai_call(
+        self,
+        call_type: str,
+        model_name: str,
+        input_summary: str,
+        success: bool,
+        latency_ms: int,
+        user_id: Optional[int] = None,
+        output_summary: Optional[str] = None,
+        error_message: Optional[str] = None,
+        token_usage: Optional[int] = None,
+    ) -> None:
+        """Phase 56: 记录AI调用日志（使用独立DB会话，不影响主流程）"""
+        try:
+            from app.database import SessionLocal
+            from app.services.ai_log_service import get_ai_log_service
+            db = SessionLocal()
+            try:
+                ai_log_service = get_ai_log_service()
+                ai_log_service.log_ai_call(
+                    db=db,
+                    call_type=call_type,
+                    model_name=model_name,
+                    input_summary=input_summary,
+                    success=success,
+                    latency_ms=latency_ms,
+                    user_id=user_id,
+                    output_summary=output_summary,
+                    error_message=error_message,
+                    token_usage=token_usage,
+                )
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"AI调用日志记录失败: {e}")
 
     def geocode_address(self, address: str) -> Optional[Dict[str, float]]:
         """将地址文本转为经纬度坐标"""
@@ -168,6 +208,7 @@ class AIService:
         """使用豆包AI分析菜品营养（Phase 38: 支持RAG上下文注入）"""
         prompt = self._build_nutrition_prompt(food_name, rag_context=rag_context)
         
+        start_time = time.time()
         try:
             response = self.ark_client.responses.create(
                 model="doubao-seed-1-6-251015",
@@ -205,12 +246,33 @@ class AIService:
                                 content = item_content
                                 break
             
+            latency_ms = int((time.time() - start_time) * 1000)
             if content:
-                return self._parse_nutrition_response(content, food_name)
+                result = self._parse_nutrition_response(content, food_name)
+                # Phase 56: 记录成功的AI调用
+                self._log_ai_call(
+                    call_type="food_analysis",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary=food_name,
+                    success=True,
+                    latency_ms=latency_ms,
+                    output_summary=f"calories={result.get('calories')}, protein={result.get('protein')}",
+                )
+                return result
             else:
                 raise Exception("豆包AI返回空响应")
                 
         except Exception as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            # Phase 56: 记录失败的AI调用
+            self._log_ai_call(
+                call_type="food_analysis",
+                model_name="doubao-seed-1-6-251015",
+                input_summary=food_name,
+                success=False,
+                latency_ms=latency_ms,
+                error_message=str(e),
+            )
             print(f"豆包AI调用失败: {str(e)}")
             import traceback
             traceback.print_exc()
@@ -555,6 +617,7 @@ class AIService:
 - destination必须是具体地点名称，不能包含"附近"、"附近XX"等模糊词汇
 """
         
+        _intent_start = time.time()
         try:
             response = Generation.call(
                 model="qwen-turbo",
@@ -598,6 +661,16 @@ class AIService:
                         if cleaned:
                             intent["destination"] = cleaned
                     
+                    # Phase 56: 记录成功的AI调用
+                    _intent_latency = int((time.time() - _intent_start) * 1000)
+                    self._log_ai_call(
+                        call_type="exercise_intent",
+                        model_name="qwen-turbo",
+                        input_summary=query,
+                        success=True,
+                        latency_ms=_intent_latency,
+                        output_summary=f"destination={intent.get('destination')}, calories_target={intent.get('calories_target')}",
+                    )
                     return intent
                 else:
                     raise ValueError("未找到JSON数据")
@@ -605,6 +678,16 @@ class AIService:
                 raise Exception(f"API调用失败: {response.message}")
                 
         except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _intent_latency = int((time.time() - _intent_start) * 1000)
+            self._log_ai_call(
+                call_type="exercise_intent",
+                model_name="qwen-turbo",
+                input_summary=query,
+                success=False,
+                latency_ms=_intent_latency,
+                error_message=str(e),
+            )
             print(f"提取运动意图失败: {str(e)}")
             # 返回默认意图
             from datetime import datetime, timedelta
@@ -824,6 +907,7 @@ class AIService:
     ]
 }}"""
         
+        _plan_start = time.time()
         try:
             response = Generation.call(
                 model="qwen-turbo",
@@ -855,6 +939,17 @@ class AIService:
                     # 后处理：根据提示词或当前时间动态调整startTime，避免固定时间
                     trip_data = self._adjust_plan_times(trip_data, intent, query)
                     
+                    # Phase 56: 记录成功的AI调用
+                    _plan_latency = int((time.time() - _plan_start) * 1000)
+                    self._log_ai_call(
+                        call_type="trip_generation",
+                        model_name="qwen-turbo",
+                        input_summary=query[:200] if query else destination,
+                        success=True,
+                        latency_ms=_plan_latency,
+                        output_summary=f"title={trip_data.get('title')}, items={len(trip_data.get('items', []))}",
+                    )
+                    
                     return trip_data
                 else:
                     raise ValueError("未找到JSON数据")
@@ -862,6 +957,16 @@ class AIService:
                 raise Exception(f"API调用失败: {response.message}")
                 
         except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _plan_latency = int((time.time() - _plan_start) * 1000)
+            self._log_ai_call(
+                call_type="trip_generation",
+                model_name="qwen-turbo",
+                input_summary=query[:200] if query else destination,
+                success=False,
+                latency_ms=_plan_latency,
+                error_message=str(e),
+            )
             print(f"生成运动计划失败: {str(e)}")
             # 返回默认运动计划
             return self._get_default_exercise_plan(intent, calories_target)
@@ -1372,6 +1477,7 @@ class AIService:
     
     def _extract_dish_names_with_ark(self, image_base64: str) -> List[str]:
         """使用豆包AI识别菜单图片"""
+        _recog_start = time.time()
         try:
             # 构建base64 data URI（尝试使用data URI格式）
             image_data_uri = f"data:image/jpeg;base64,{image_base64}"
@@ -1425,13 +1531,34 @@ class AIService:
                                     content = sub_item.text
                                     break
             
+            _recog_latency = int((time.time() - _recog_start) * 1000)
             if content:
                 print(content)
-                return self._parse_dish_names_from_content(content)
+                dish_names = self._parse_dish_names_from_content(content)
+                # Phase 56: 记录成功的AI调用
+                self._log_ai_call(
+                    call_type="menu_recognition",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary="菜单图片识别",
+                    success=True,
+                    latency_ms=_recog_latency,
+                    output_summary=f"识别到{len(dish_names)}个菜品: {', '.join(dish_names[:5])}",
+                )
+                return dish_names
             else:
                 raise Exception("无法从响应中提取内容")
                 
         except Exception as e:
+            _recog_latency = int((time.time() - _recog_start) * 1000)
+            # Phase 56: 记录失败的AI调用
+            self._log_ai_call(
+                call_type="menu_recognition",
+                model_name="doubao-seed-1-6-251015",
+                input_summary="菜单图片识别",
+                success=False,
+                latency_ms=_recog_latency,
+                error_message=str(e),
+            )
             print(f"豆包AI识别失败: {str(e)}")
             import traceback
             traceback.print_exc()

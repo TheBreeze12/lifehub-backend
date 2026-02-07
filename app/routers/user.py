@@ -16,8 +16,14 @@ from app.models.user import (
     RefreshTokenResponse,
     DataForgetResponse,
     DataForgetData,
-    DeletedCounts
+    DeletedCounts,
+    AiCallLogResponse,
+    AiCallLogListData,
+    AiCallLogItem,
+    AiCallLogStatsResponse,
+    AiCallLogStatsData,
 )
+from typing import Optional
 from app.database import get_db
 from app.db_models.user import User
 from app.utils.auth import (
@@ -489,4 +495,111 @@ async def delete_user_data(
         raise HTTPException(
             status_code=500,
             detail=f"删除用户数据失败: {str(e)}"
+        )
+
+
+# ============================================================
+# Phase 56: AI调用记录/日志查看
+# ============================================================
+
+@router.get("/ai-logs", response_model=AiCallLogResponse)
+async def get_ai_call_logs(
+    user_id: int,
+    call_type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """
+    获取用户AI调用日志列表（Phase 56）
+    
+    - **user_id**: 用户ID
+    - **call_type**: 调用类型过滤（可选）: food_analysis/menu_recognition/trip_generation/exercise_intent
+    - **limit**: 返回数量限制，默认50，最大200
+    - **offset**: 偏移量，默认0
+    """
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="无效的用户ID")
+    
+    # 约束limit范围
+    if limit <= 0:
+        limit = 50
+    if limit > 200:
+        limit = 200
+    if offset < 0:
+        offset = 0
+
+    try:
+        from app.services.ai_log_service import get_ai_log_service
+        ai_log_service = get_ai_log_service()
+
+        total, logs = ai_log_service.get_user_ai_logs(
+            db, user_id=user_id, call_type=call_type, limit=limit, offset=offset
+        )
+
+        log_items = [
+            AiCallLogItem(
+                id=log.id,
+                user_id=log.user_id,
+                call_type=log.call_type,
+                model_name=log.model_name,
+                input_summary=log.input_summary,
+                output_summary=log.output_summary,
+                success=log.success,
+                error_message=log.error_message,
+                latency_ms=log.latency_ms,
+                token_usage=log.token_usage,
+                created_at=log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else None
+            )
+            for log in logs
+        ]
+
+        return AiCallLogResponse(
+            code=200,
+            message="获取成功",
+            data=AiCallLogListData(total=total, logs=log_items)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取AI调用日志失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取AI调用日志失败: {str(e)}"
+        )
+
+
+@router.get("/ai-logs/stats", response_model=AiCallLogStatsResponse)
+async def get_ai_call_log_stats(
+    user_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    获取用户AI调用统计（Phase 56）
+    
+    - **user_id**: 用户ID
+    """
+    if user_id <= 0:
+        raise HTTPException(status_code=400, detail="无效的用户ID")
+
+    try:
+        from app.services.ai_log_service import get_ai_log_service
+        ai_log_service = get_ai_log_service()
+
+        stats = ai_log_service.get_ai_log_stats(db, user_id=user_id)
+
+        return AiCallLogStatsResponse(
+            code=200,
+            message="获取成功",
+            data=AiCallLogStatsData(**stats)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取AI调用统计失败: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取AI调用统计失败: {str(e)}"
         )
