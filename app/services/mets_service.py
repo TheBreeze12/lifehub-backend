@@ -6,9 +6,13 @@ METs值表基于《中国成人身体活动能量消耗参考手册》和《Comp
 公式：消耗热量(kcal) = METs × 体重(kg) × 时间(h)
 
 Phase 19 实现
+Phase 40 增强：接入运动消耗库 RAG 检索，扩展运动类型覆盖到 100+
 """
 
+import logging
 from typing import Dict, List, Optional, Any
+
+logger = logging.getLogger(__name__)
 
 
 class METsService:
@@ -286,10 +290,18 @@ class METsService:
     # 默认METs值（用于未知运动类型）
     DEFAULT_METS = 3.5
     
-    def __init__(self):
-        """初始化METs服务"""
+    def __init__(self, exercise_rag_service=None):
+        """
+        初始化METs服务
+        
+        Args:
+            exercise_rag_service: 运动消耗 RAG 服务实例（可选）。
+                                  传入后可通过向量检索扩展运动类型覆盖。
+                                  不传则仅使用静态 METs 表。
+        """
         # 构建完整的METs表（包含中英文键）
         self.mets_table = dict(self.METS_TABLE)
+        self._exercise_rag_service = exercise_rag_service
         
     def _normalize_exercise_type(self, exercise_type: str) -> str:
         """
@@ -332,6 +344,8 @@ class METsService:
         """
         获取指定运动类型的METs值
         
+        优先从静态表查找，未命中时回退到 RAG 检索（Phase 40 增强）。
+        
         Args:
             exercise_type: 运动类型（支持中英文）
             
@@ -342,6 +356,11 @@ class METsService:
         
         if normalized in self.METS_TABLE:
             return self.METS_TABLE[normalized]["mets"]
+        
+        # Phase 40: 静态表未命中时，尝试 RAG 检索
+        rag_result = self._lookup_via_rag(exercise_type)
+        if rag_result is not None:
+            return rag_result
             
         # 返回默认METs值
         return self.DEFAULT_METS
@@ -425,6 +444,8 @@ class METsService:
         """
         获取运动类型的详细信息
         
+        优先从静态表查找，未命中时回退到 RAG 检索（Phase 40 增强）。
+        
         Args:
             exercise_type: 运动类型
             
@@ -437,6 +458,11 @@ class METsService:
             info = dict(self.METS_TABLE[normalized])
             info["type"] = normalized
             return info
+        
+        # Phase 40: 静态表未命中时，尝试 RAG 检索
+        rag_info = self._lookup_info_via_rag(exercise_type)
+        if rag_info is not None:
+            return rag_info
             
         # 返回默认信息
         return {
@@ -510,6 +536,96 @@ class METsService:
                     
         return None
         
+    # ================================================================
+    # Phase 40: RAG 增强方法
+    # ================================================================
+    
+    def _lookup_via_rag(self, exercise_type: str) -> Optional[float]:
+        """
+        通过 RAG 检索获取运动的 METs 值
+        
+        Args:
+            exercise_type: 运动类型名称
+            
+        Returns:
+            METs 值，未找到返回 None
+        """
+        if self._exercise_rag_service is None:
+            return None
+            
+        try:
+            result = self._exercise_rag_service.get_exercise_mets_from_rag(exercise_type)
+            if result.get("found") and result.get("mets", 0) > 0:
+                logger.debug(
+                    f"RAG 命中运动: '{exercise_type}' -> '{result['exercise_name']}' "
+                    f"(METs={result['mets']}, distance={result.get('distance', '?')})"
+                )
+                return float(result["mets"])
+        except Exception as e:
+            logger.warning(f"RAG 查询运动 METs 失败: {e}")
+        
+        return None
+    
+    def _lookup_info_via_rag(self, exercise_type: str) -> Optional[Dict[str, Any]]:
+        """
+        通过 RAG 检索获取运动的详细信息
+        
+        Args:
+            exercise_type: 运动类型名称
+            
+        Returns:
+            运动信息字典，未找到返回 None
+        """
+        if self._exercise_rag_service is None:
+            return None
+            
+        try:
+            result = self._exercise_rag_service.get_exercise_mets_from_rag(exercise_type)
+            if result.get("found") and result.get("mets", 0) > 0:
+                return {
+                    "type": result.get("exercise_name", exercise_type),
+                    "mets": float(result["mets"]),
+                    "name_cn": result.get("exercise_name", exercise_type),
+                    "name_en": result.get("exercise_name", exercise_type),
+                    "description": result.get("description", ""),
+                    "intensity": result.get("intensity", "moderate"),
+                    "category": result.get("category", ""),
+                    "source": "rag",
+                }
+        except Exception as e:
+            logger.warning(f"RAG 查询运动信息失败: {e}")
+        
+        return None
+    
+    def get_all_exercise_types_expanded(self) -> List[str]:
+        """
+        获取所有支持的运动类型（静态表 + RAG 知识库）
+        
+        Phase 40 新增：返回静态表和 RAG 知识库中所有运动类型的合集。
+        
+        Returns:
+            运动类型名称列表
+        """
+        # 静态表中的运动类型
+        types = list(self.METS_TABLE.keys())
+        
+        # 如果有 RAG 服务，合并知识库中的运动名称
+        if self._exercise_rag_service is not None:
+            try:
+                rag_names = self._exercise_rag_service.get_all_exercise_names()
+                types.extend(rag_names)
+            except Exception as e:
+                logger.warning(f"获取 RAG 运动类型列表失败: {e}")
+        
+        # 去重（保持顺序）
+        seen = set()
+        unique = []
+        for t in types:
+            if t not in seen:
+                seen.add(t)
+                unique.append(t)
+        return unique
+    
     def recalculate_trip_items_calories(
         self,
         items: List[Dict[str, Any]],
@@ -545,8 +661,20 @@ _mets_service_instance: Optional[METsService] = None
 
 
 def get_mets_service() -> METsService:
-    """获取METs服务单例"""
+    """
+    获取METs服务单例
+    
+    自动注入运动消耗 RAG 服务（Phase 40 增强）。
+    如果 RAG 服务不可用，降级为仅使用静态表。
+    """
     global _mets_service_instance
     if _mets_service_instance is None:
-        _mets_service_instance = METsService()
+        # 尝试注入 RAG 服务
+        exercise_rag = None
+        try:
+            from app.services.exercise_rag_service import get_exercise_rag_service
+            exercise_rag = get_exercise_rag_service()
+        except Exception as e:
+            logger.warning(f"运动消耗 RAG 服务加载失败，降级为静态表: {e}")
+        _mets_service_instance = METsService(exercise_rag_service=exercise_rag)
     return _mets_service_instance
