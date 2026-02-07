@@ -333,13 +333,20 @@ class DataMaskingMiddleware(BaseHTTPMiddleware):
                 if body_bytes:
                     body_json = json.loads(body_bytes)
                     masked_json = apply_response_masking(body_json)
-                    masked_bytes = json.dumps(masked_json, ensure_ascii=False).encode("utf-8")
+                    # 使用与FastAPI一致的紧凑JSON序列化格式，避免content-length不匹配
+                    masked_bytes = json.dumps(
+                        masked_json, ensure_ascii=False, separators=(",", ":")
+                    ).encode("utf-8")
 
-                    # 构建新的响应
+                    # 构建新的响应，移除原始content-length让Response自动计算
+                    new_headers = {
+                        k: v for k, v in response.headers.items()
+                        if k.lower() != "content-length"
+                    }
                     return Response(
                         content=masked_bytes,
                         status_code=response.status_code,
-                        headers=dict(response.headers),
+                        headers=new_headers,
                         media_type="application/json",
                     )
             except (json.JSONDecodeError, UnicodeDecodeError):

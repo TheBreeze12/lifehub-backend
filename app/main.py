@@ -37,6 +37,12 @@ async def lifespan(app: FastAPI):
     # 检查数据库连接
     if check_db_connection():
         print("✅ 数据库连接正常")
+        # 自动初始化数据库表（如果不存在则创建，已存在则跳过）
+        try:
+            init_db()
+            print("✅ 数据库表初始化完成")
+        except Exception as e:
+            print(f"⚠️  数据库表初始化警告: {e}")
     else:
         print("⚠️  警告：数据库连接失败，请检查配置")
     
