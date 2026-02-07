@@ -6,6 +6,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import os
+import logging
+
+# 导入数据脱敏中间件
+from app.middleware.data_masking import DataMaskingMiddleware, SensitiveDataFilter
 
 # 加载环境变量
 load_dotenv()
@@ -60,6 +64,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 注册数据脱敏中间件（Phase 54）
+app.add_middleware(DataMaskingMiddleware)
+
+# 注册日志脱敏过滤器（Phase 54）
+for handler in logging.root.handlers:
+    handler.addFilter(SensitiveDataFilter())
+# 确保uvicorn的logger也加上脱敏过滤器
+for logger_name in ["uvicorn", "uvicorn.access", "uvicorn.error"]:
+    _logger = logging.getLogger(logger_name)
+    for handler in _logger.handlers:
+        handler.addFilter(SensitiveDataFilter())
 
 # 注册路由
 app.include_router(food_router)
