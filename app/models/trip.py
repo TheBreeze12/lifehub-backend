@@ -419,3 +419,75 @@ class PlanBResponse(BaseModel):
             }
         }
 
+
+
+# ==================== Phase 46: 离线运动包模型 ====================
+
+class OfflinePackageRequest(BaseModel):
+    """生成离线运动包请求"""
+    plan_id: int = Field(..., description="运动计划ID", gt=0)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "plan_id": 1
+            }
+        }
+
+
+class TileBounds(BaseModel):
+    """地图瓦片边界"""
+    min_lat: float = Field(..., description="最小纬度")
+    max_lat: float = Field(..., description="最大纬度")
+    min_lng: float = Field(..., description="最小经度")
+    max_lng: float = Field(..., description="最大经度")
+
+
+class OfflinePackageData(BaseModel):
+    """离线包响应数据"""
+    plan_id: int = Field(..., description="运动计划ID")
+    package_id: str = Field(..., description="离线包唯一标识")
+    version: int = Field(..., description="离线包版本号")
+    file_size: int = Field(..., description="文件大小（字节）")
+    created_at: str = Field(..., description="创建时间（ISO格式）")
+    tile_bounds: Optional[TileBounds] = Field(None, description="地图瓦片覆盖范围")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "plan_id": 1,
+                "package_id": "pkg_1_1_abc12345",
+                "version": 1,
+                "file_size": 2048,
+                "created_at": "2026-02-07T15:00:00",
+                "tile_bounds": {
+                    "min_lat": 39.8942,
+                    "max_lat": 40.0029,
+                    "min_lng": 116.3790,
+                    "max_lng": 116.4174
+                }
+            }
+        }
+
+
+class OfflinePackageResponse(BaseModel):
+    """离线包生成响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    data: Optional[OfflinePackageData] = Field(None, description="离线包数据")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "离线包生成成功",
+                "data": {
+                    "plan_id": 1,
+                    "package_id": "pkg_1_1_abc12345",
+                    "version": 1,
+                    "file_size": 2048,
+                    "created_at": "2026-02-07T15:00:00",
+                    "tile_bounds": None
+                }
+            }
+        }

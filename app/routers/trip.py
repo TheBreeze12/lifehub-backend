@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime, date, time
 from typing import Optional, List
+from fastapi.responses import FileResponse
 from app.models.trip import (
     GenerateTripRequest,
     GenerateTripResponse,
@@ -22,6 +23,10 @@ from app.models.trip import (
     PlanBData,
     PlanBAlternative,
     WeatherAssessment,
+    OfflinePackageRequest,
+    OfflinePackageResponse,
+    OfflinePackageData,
+    TileBounds,
 )
 from app.database import get_db
 from app.db_models.trip_plan import TripPlan
@@ -31,6 +36,7 @@ from app.services.ai_service import AIService
 from app.services.mets_service import METsService
 from app.services.route_optimization_service import get_route_optimization_service
 from app.services.weather_service import WeatherService
+from app.services.offline_package_service import OfflinePackageService
 
 router = APIRouter(prefix="/api/trip", tags=["运动规划"])
 
@@ -38,6 +44,7 @@ router = APIRouter(prefix="/api/trip", tags=["运动规划"])
 ai_service = AIService()
 mets_service = METsService()
 weather_service = WeatherService()
+offline_package_service = OfflinePackageService()
 
 
 @router.post("/generate", response_model=GenerateTripResponse)
@@ -621,3 +628,101 @@ async def generate_pareto_routes(
     except Exception as e:
         print(f"生成帕累托路径失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"生成帕累托路径失败: {str(e)}")
+
+
+# ==================== Phase 46: 离线运动包接口 ====================
+
+@router.post("/offline-package", response_model=OfflinePackageResponse)
+async def generate_offline_package(
+    request: OfflinePackageRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    生成离线运动包
+
+    根据运动计划ID，打包运动方案文本、POI数据、地图瓦片元数据为ZIP离线包。
+    支持同一计划多次生成（版本递增）。
+
+    - **plan_id**: 运动计划ID（必须大于0）
+    """
+    try:
+        # 1. 查询运动计划
+        trip_plan = db.query(TripPlan).filter(TripPlan.id == request.plan_id).first()
+        if not trip_plan:
+            raise HTTPException(status_code=404, detail=f"运动计划不存在，plan_id: {request.plan_id}")
+
+        # 2. 查询运动项目
+        trip_items = db.query(TripItem).filter(
+            TripItem.trip_id == request.plan_id
+        ).order_by(TripItem.sort_order).all()
+
+        # 3. 生成离线包
+        result = offline_package_service.generate_package(trip_plan, trip_items)
+
+        # 4. 更新 trip_plan 的离线包标记
+        trip_plan.is_offline = 1
+        trip_plan.offline_size = result["file_size"]
+        db.commit()
+
+        # 5. 构建 tile_bounds 响应
+        pkg_info = offline_package_service.get_package_info(result["package_id"])
+        tile_bounds_data = None
+        if pkg_info and pkg_info.get("tile_bounds"):
+            tb = pkg_info["tile_bounds"]
+            if tb.get("min_lat") != 0 or tb.get("max_lat") != 0:
+                tile_bounds_data = TileBounds(
+                    min_lat=tb["min_lat"],
+                    max_lat=tb["max_lat"],
+                    min_lng=tb["min_lng"],
+                    max_lng=tb["max_lng"],
+                )
+
+        # 6. 构建响应
+        package_data = OfflinePackageData(
+            plan_id=request.plan_id,
+            package_id=result["package_id"],
+            version=result["version"],
+            file_size=result["file_size"],
+            created_at=pkg_info["created_at"] if pkg_info else "",
+            tile_bounds=tile_bounds_data,
+        )
+
+        return OfflinePackageResponse(
+            code=200,
+            message="离线包生成成功",
+            data=package_data,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"生成离线包失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"生成离线包失败: {str(e)}")
+
+
+@router.get("/offline-package/{package_id}")
+async def download_offline_package(package_id: str):
+    """
+    下载离线运动包
+
+    根据离线包ID下载对应的ZIP文件。
+
+    - **package_id**: 离线包唯一标识
+    """
+    try:
+        file_path = offline_package_service.get_package_file_path(package_id)
+        if not file_path:
+            raise HTTPException(status_code=404, detail=f"离线包不存在或已过期，package_id: {package_id}")
+
+        return FileResponse(
+            path=file_path,
+            media_type="application/zip",
+            filename=f"{package_id}.zip",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"下载离线包失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"下载离线包失败: {str(e)}")

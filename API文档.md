@@ -42,6 +42,8 @@
 | **运动** | `/api/trip/home`               | GET  | 获取首页运动计划   |
 | **运动** | `/api/trip/{tripId}`           | GET  | 获取运动计划详情   |
 | **运动** | `/api/trip/plan-b/{plan_id}`   | GET  | 获取天气动态调整Plan B |
+| **运动** | `/api/trip/offline-package`    | POST | 生成离线运动包（Phase 46） |
+| **运动** | `/api/trip/offline-package/{package_id}` | GET | 下载离线运动包（Phase 46） |
 | **天气** | `/api/weather/by-address`      | GET  | 根据地址查询天气   |
 | **天气** | `/api/weather/by-plan`         | GET  | 根据计划ID查询天气 |
 | **运动记录** | `/api/exercise/record`   | POST | 新增运动记录       |
@@ -1567,6 +1569,120 @@ GET http://localhost:8000/api/trip/plan-b/1
 
 ---
 
+### 12.3 生成离线运动包 ⭐ (Phase 46 新增)
+
+**接口地址**: `POST /api/trip/offline-package`
+
+**接口描述**: 根据运动计划ID，打包运动方案文本、POI数据、地图瓦片元数据为ZIP离线包。支持同一计划多次生成（版本递增）。
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名  | 类型 | 必填 | 说明                 |
+| ------- | ---- | ---- | -------------------- |
+| plan_id | int  | 是   | 运动计划ID，必须 > 0 |
+
+**请求示例**:
+```bash
+curl -X POST http://localhost:8000/api/trip/offline-package \
+  -H 'Content-Type: application/json' \
+  -d '{"plan_id": 1}'
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "离线包生成成功",
+  "data": {
+    "plan_id": 1,
+    "package_id": "pkg_1_1_abc12345",
+    "version": 1,
+    "file_size": 2048,
+    "created_at": "2026-02-07T15:00:00",
+    "tile_bounds": {
+      "min_lat": 39.8942,
+      "max_lat": 40.0029,
+      "min_lng": 116.3790,
+      "max_lng": 116.4174
+    }
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                    | 类型        | 说明                           |
+| ----------------------- | ----------- | ------------------------------ |
+| code                    | int         | 状态码，200表示成功            |
+| message                 | string      | 响应消息                       |
+| data.plan_id            | int         | 运动计划ID                     |
+| data.package_id         | string      | 离线包唯一标识                 |
+| data.version            | int         | 离线包版本号（同一计划递增）   |
+| data.file_size          | int         | 文件大小（字节）               |
+| data.created_at         | string      | 创建时间（ISO格式）            |
+| data.tile_bounds        | object/null | 地图瓦片覆盖范围               |
+| data.tile_bounds.min_lat| float       | 最小纬度                       |
+| data.tile_bounds.max_lat| float       | 最大纬度                       |
+| data.tile_bounds.min_lng| float       | 最小经度                       |
+| data.tile_bounds.max_lng| float       | 最大经度                       |
+
+**离线包ZIP内容**:
+| 文件名          | 说明                                     |
+| --------------- | ---------------------------------------- |
+| metadata.json   | 包元数据（package_id、版本、创建时间等） |
+| plan.json       | 运动方案文本（标题、项目、总时长等）     |
+| pois.json       | POI数据（名称、类型、坐标等）            |
+| tiles_meta.json | 地图瓦片元数据（边界、缩放级别、数量）   |
+
+**错误响应**:
+- 计划不存在（HTTP 404）:
+```json
+{
+  "detail": "运动计划不存在，plan_id: 999"
+}
+```
+- 无效plan_id（HTTP 422）:
+```json
+{
+  "detail": [{"msg": "Input should be greater than 0"}]
+}
+```
+
+---
+
+### 12.4 下载离线运动包 ⭐ (Phase 46 新增)
+
+**接口地址**: `GET /api/trip/offline-package/{package_id}`
+
+**接口描述**: 根据离线包ID下载对应的ZIP文件。
+
+**路径参数**:
+| 参数名     | 类型   | 必填 | 说明         |
+| ---------- | ------ | ---- | ------------ |
+| package_id | string | 是   | 离线包唯一ID |
+
+**请求示例**:
+```bash
+curl -O http://localhost:8000/api/trip/offline-package/pkg_1_1_abc12345
+```
+
+**响应**: 直接返回ZIP文件流
+- Content-Type: `application/zip`
+- Content-Disposition: `attachment; filename="pkg_1_1_abc12345.zip"`
+
+**错误响应**:
+- 离线包不存在（HTTP 404）:
+```json
+{
+  "detail": "离线包不存在或已过期，package_id: pkg_xxx"
+}
+```
+
+---
+
 ### 13. 天气：根据地址获取当前天气 ⭐
 
 **接口地址**: `GET /api/weather/by-address`
@@ -2989,6 +3105,14 @@ DELETE http://localhost:8000/api/exercise/record/1?userId=1
 - ✅ 支持关联运动计划、自动填充计划数据
 - ✅ 支持热量达成率和时长达成率计算
 - ✅ 完善权限校验（只能操作自己的记录）
+
+### v1.9.0 (2026-02-07)
+- ✅ 添加离线运动包生成接口 `POST /api/trip/offline-package`（Phase 46）
+- ✅ 添加离线运动包下载接口 `GET /api/trip/offline-package/{package_id}`（Phase 46）
+- ✅ 实现地图瓦片区域计算与元数据生成
+- ✅ 实现POI数据提取与打包
+- ✅ 实现运动方案文本生成
+- ✅ 支持离线包版本管理
 
 ### v1.5.0 (2026-02-05)
 - ✅ 添加每日营养素统计接口 `/api/stats/nutrients/daily`（Phase 16）
