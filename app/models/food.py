@@ -385,3 +385,90 @@ class AllergenCategoriesResponse(BaseModel):
                 ]
             }
         }
+
+
+# ==================== Phase 41: 个性化菜品推荐模型 ====================
+
+class RecommendedFood(BaseModel):
+    """单个推荐菜品"""
+    food_name: str = Field(..., description="菜品名称")
+    calories: float = Field(..., description="热量（千卡/100g）")
+    protein: float = Field(..., description="蛋白质（克/100g）")
+    fat: float = Field(..., description="脂肪（克/100g）")
+    carbs: float = Field(..., description="碳水化合物（克/100g）")
+    score: float = Field(..., description="综合推荐评分（0-100）")
+    reason: str = Field(..., description="推荐理由")
+    tags: list[str] = Field(default=[], description="标签（如高蛋白、低脂肪等）")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "food_name": "清蒸鲈鱼",
+                "calories": 105.0,
+                "protein": 19.5,
+                "fat": 3.0,
+                "carbs": 0.5,
+                "score": 92.5,
+                "reason": "高蛋白低脂肪，非常适合您的减脂目标。热量仅105千卡，在您的剩余配额内。",
+                "tags": ["高蛋白", "低脂肪", "低热量"]
+            }
+        }
+
+
+class RecommendationData(BaseModel):
+    """推荐结果数据"""
+    user_id: int = Field(..., description="用户ID")
+    meal_type: str = Field(..., description="餐次")
+    remaining_calories: float = Field(..., description="当日剩余热量配额（kcal）")
+    daily_calorie_target: float = Field(..., description="每日热量目标（kcal）")
+    health_goal: str = Field(..., description="健康目标")
+    health_goal_label: str = Field(..., description="健康目标中文标签")
+    recommendations: list[RecommendedFood] = Field(..., description="推荐菜品列表")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": 1,
+                "meal_type": "lunch",
+                "remaining_calories": 800.0,
+                "daily_calorie_target": 2000.0,
+                "health_goal": "reduce_fat",
+                "health_goal_label": "减脂",
+                "recommendations": [
+                    {
+                        "food_name": "清蒸鲈鱼",
+                        "calories": 105.0,
+                        "protein": 19.5,
+                        "fat": 3.0,
+                        "carbs": 0.5,
+                        "score": 92.5,
+                        "reason": "高蛋白低脂肪，非常适合您的减脂目标",
+                        "tags": ["高蛋白", "低脂肪", "低热量"]
+                    }
+                ]
+            }
+        }
+
+
+class RecommendationResponse(BaseModel):
+    """个性化菜品推荐响应"""
+    code: int = Field(200, description="状态码，200表示成功")
+    message: str = Field("推荐成功", description="消息")
+    data: RecommendationData | None = Field(None, description="推荐结果")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "推荐成功",
+                "data": {
+                    "user_id": 1,
+                    "meal_type": "lunch",
+                    "remaining_calories": 800.0,
+                    "daily_calorie_target": 2000.0,
+                    "health_goal": "reduce_fat",
+                    "health_goal_label": "减脂",
+                    "recommendations": []
+                }
+            }
+        }

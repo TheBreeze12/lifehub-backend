@@ -1,0 +1,445 @@
+[
+  {
+    "dish_name": "宫保鸡丁",
+    "aliases": ["宫爆鸡丁"],
+    "ingredients": ["鸡胸肉", "花生米", "干辣椒", "花椒", "葱", "姜", "蒜", "酱油", "醋", "糖", "淀粉", "料酒"],
+    "allergens": {
+      "peanut": {"direct": true, "ingredient": "花生米", "note": "花生是宫保鸡丁的核心配料"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "调味用酱油含大豆"},
+      "wheat": {"direct": false, "ingredient": "酱油/淀粉", "note": "酱油可能含小麦，淀粉可能为小麦淀粉"}
+    },
+    "hidden_allergen_notes": "花生是该菜品的标志性配料，即使菜名中未直接提及'花生'，也一定含有花生"
+  },
+  {
+    "dish_name": "沙茶酱牛肉",
+    "aliases": ["沙茶牛肉", "沙茶炒牛肉"],
+    "ingredients": ["牛肉", "沙茶酱", "蒜", "葱", "辣椒", "酱油", "糖", "油"],
+    "allergens": {
+      "peanut": {"direct": true, "ingredient": "沙茶酱(含花生)", "note": "沙茶酱的主要原料包括花生"},
+      "shellfish": {"direct": true, "ingredient": "沙茶酱(含虾酱/虾米)", "note": "沙茶酱含虾酱或虾米成分"},
+      "fish": {"direct": false, "ingredient": "沙茶酱(含鱼露)", "note": "部分沙茶酱含鱼露"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "调味用酱油含大豆"}
+    },
+    "hidden_allergen_notes": "沙茶酱是高隐性过敏原调料，含花生、虾酱等多种过敏原成分，对花生和甲壳类过敏者需特别注意"
+  },
+  {
+    "dish_name": "咖喱鸡",
+    "aliases": ["咖喱鸡肉", "黄咖喱鸡", "日式咖喱鸡"],
+    "ingredients": ["鸡肉", "咖喱块/粉", "土豆", "胡萝卜", "洋葱", "椰浆", "油"],
+    "allergens": {
+      "milk": {"direct": false, "ingredient": "咖喱块(含乳制品)", "note": "日式咖喱块通常含乳制品成分"},
+      "peanut": {"direct": false, "ingredient": "咖喱酱(部分含花生)", "note": "泰式咖喱酱可能含花生"},
+      "tree_nut": {"direct": false, "ingredient": "椰浆", "note": "椰子在部分标准中归为树坚果"},
+      "wheat": {"direct": false, "ingredient": "咖喱块(含面粉)", "note": "日式咖喱块通常以面粉增稠"}
+    },
+    "hidden_allergen_notes": "咖喱块/酱是复合调料，可能含乳制品、面粉、花生等多种隐性过敏原"
+  },
+  {
+    "dish_name": "麻婆豆腐",
+    "aliases": ["麻辣豆腐"],
+    "ingredients": ["豆腐", "猪肉末", "豆瓣酱", "花椒", "辣椒", "葱", "姜", "蒜", "酱油", "淀粉"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "豆腐/豆瓣酱/酱油", "note": "豆腐、豆瓣酱和酱油均含大豆"},
+      "wheat": {"direct": false, "ingredient": "酱油/淀粉", "note": "酱油可能含小麦"}
+    },
+    "hidden_allergen_notes": "大豆是该菜品的核心成分，对大豆过敏者不宜食用"
+  },
+  {
+    "dish_name": "担担面",
+    "aliases": ["担担面条", "四川担担面"],
+    "ingredients": ["面条", "猪肉末", "芝麻酱", "花生碎", "酱油", "醋", "辣椒油", "花椒", "葱"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面条", "note": "面条由小麦面粉制成"},
+      "peanut": {"direct": true, "ingredient": "花生碎", "note": "花生碎是担担面的标志性配料"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "调味用酱油含大豆"},
+      "tree_nut": {"direct": false, "ingredient": "芝麻酱", "note": "芝麻在部分标准中作为坚果类过敏原"}
+    },
+    "hidden_allergen_notes": "担担面含花生碎和芝麻酱，对坚果类过敏者需特别注意"
+  },
+  {
+    "dish_name": "蛋炒饭",
+    "aliases": ["炒饭", "扬州炒饭", "什锦炒饭"],
+    "ingredients": ["米饭", "鸡蛋", "葱", "盐", "酱油", "油", "火腿/虾仁(可选)"],
+    "allergens": {
+      "egg": {"direct": true, "ingredient": "鸡蛋", "note": "鸡蛋是蛋炒饭的核心配料"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "调味用酱油含大豆"},
+      "shellfish": {"direct": false, "ingredient": "虾仁(可选)", "note": "扬州炒饭通常含虾仁"}
+    },
+    "hidden_allergen_notes": "扬州炒饭通常含虾仁，点餐时需确认"
+  },
+  {
+    "dish_name": "鱼香肉丝",
+    "aliases": ["鱼香肉丝盖饭"],
+    "ingredients": ["猪肉", "木耳", "胡萝卜", "青椒", "泡椒", "豆瓣酱", "酱油", "醋", "糖", "淀粉", "葱", "姜", "蒜"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "豆瓣酱/酱油", "note": "豆瓣酱和酱油均含大豆"},
+      "wheat": {"direct": false, "ingredient": "酱油/淀粉", "note": "酱油可能含小麦"}
+    },
+    "hidden_allergen_notes": "虽名为'鱼香'，但不含鱼类，是川菜调味法名称"
+  },
+  {
+    "dish_name": "蛋糕",
+    "aliases": ["生日蛋糕", "奶油蛋糕", "慕斯蛋糕", "芝士蛋糕", "提拉米苏"],
+    "ingredients": ["面粉", "鸡蛋", "糖", "黄油/奶油", "牛奶", "泡打粉"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉", "note": "蛋糕由小麦面粉制成"},
+      "egg": {"direct": true, "ingredient": "鸡蛋", "note": "鸡蛋是蛋糕的核心配料"},
+      "milk": {"direct": true, "ingredient": "黄油/奶油/牛奶", "note": "蛋糕含多种乳制品"},
+      "soy": {"direct": false, "ingredient": "大豆卵磷脂", "note": "部分蛋糕含大豆卵磷脂作为乳化剂"}
+    },
+    "hidden_allergen_notes": "蛋糕是多种过敏原的综合体，含麸质、蛋、奶，部分还含坚果装饰"
+  },
+  {
+    "dish_name": "寿司",
+    "aliases": ["手卷寿司", "三文鱼寿司", "日本寿司", "加州卷"],
+    "ingredients": ["寿司米", "海苔", "醋", "糖", "盐", "鱼片/虾/蟹棒(视种类)"],
+    "allergens": {
+      "fish": {"direct": true, "ingredient": "鱼片(三文鱼/金枪鱼等)", "note": "多数寿司含生鱼片"},
+      "shellfish": {"direct": true, "ingredient": "虾/蟹棒", "note": "部分寿司含虾或蟹棒"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "寿司通常蘸酱油食用"},
+      "egg": {"direct": false, "ingredient": "玉子烧", "note": "部分寿司含蛋皮或玉子烧"}
+    },
+    "hidden_allergen_notes": "寿司种类繁多，蟹棒通常为鱼糜制品而非真蟹肉，但仍含鱼类过敏原"
+  },
+  {
+    "dish_name": "麻辣烫",
+    "aliases": ["冒菜", "麻辣香锅"],
+    "ingredients": ["各种蔬菜", "肉丸", "豆制品", "粉丝/面条", "芝麻酱", "花生酱", "辣椒", "花椒", "各种酱料"],
+    "allergens": {
+      "peanut": {"direct": true, "ingredient": "花生酱/花生碎", "note": "麻辣烫蘸料通常含花生酱"},
+      "soy": {"direct": true, "ingredient": "豆制品/酱油", "note": "含豆腐、豆皮等豆制品"},
+      "wheat": {"direct": true, "ingredient": "面条/面筋", "note": "面条和面筋含小麦"},
+      "shellfish": {"direct": false, "ingredient": "虾滑/鱼丸", "note": "部分食材含虾或鱼"},
+      "egg": {"direct": false, "ingredient": "鹌鹑蛋", "note": "鹌鹑蛋是常见配料"}
+    },
+    "hidden_allergen_notes": "麻辣烫成分复杂，蘸料中花生酱和芝麻酱是主要隐性过敏原来源"
+  },
+  {
+    "dish_name": "炸酱面",
+    "aliases": ["老北京炸酱面", "杂酱面"],
+    "ingredients": ["面条", "猪肉末", "黄酱/甜面酱", "葱", "姜", "黄瓜丝", "豆芽"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面条", "note": "面条由小麦面粉制成"},
+      "soy": {"direct": true, "ingredient": "黄酱/甜面酱", "note": "黄酱和甜面酱由大豆/面粉发酵制成"}
+    },
+    "hidden_allergen_notes": "黄酱是大豆和小麦的发酵产品，同时含大豆和小麦过敏原"
+  },
+  {
+    "dish_name": "红烧肉",
+    "aliases": ["东坡肉", "红烧五花肉", "毛氏红烧肉"],
+    "ingredients": ["五花肉", "酱油", "老抽", "冰糖", "料酒", "葱", "姜", "八角", "桂皮"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "酱油/老抽", "note": "调味用酱油含大豆"},
+      "wheat": {"direct": false, "ingredient": "酱油", "note": "酱油可能含小麦成分"}
+    },
+    "hidden_allergen_notes": "酱油是隐性大豆/小麦过敏原来源，中式红烧菜品几乎都含酱油"
+  },
+  {
+    "dish_name": "糖醋里脊",
+    "aliases": ["糖醋肉", "糖醋排骨", "糖醋鱼"],
+    "ingredients": ["猪里脊/排骨", "面粉", "淀粉", "鸡蛋", "番茄酱", "糖", "醋", "酱油", "油"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉", "note": "裹粉炸制使用小麦面粉"},
+      "egg": {"direct": true, "ingredient": "鸡蛋", "note": "挂糊用鸡蛋液"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "调味用酱油含大豆"}
+    },
+    "hidden_allergen_notes": "糖醋类菜品通常需要挂糊油炸，面糊中含鸡蛋和面粉"
+  },
+  {
+    "dish_name": "皮蛋瘦肉粥",
+    "aliases": ["皮蛋粥", "瘦肉粥"],
+    "ingredients": ["大米", "皮蛋", "猪瘦肉", "葱", "姜", "盐", "胡椒粉"],
+    "allergens": {
+      "egg": {"direct": true, "ingredient": "皮蛋(鸭蛋制品)", "note": "皮蛋由鸭蛋加工而成，属蛋类过敏原"}
+    },
+    "hidden_allergen_notes": "皮蛋是鸭蛋的加工制品，容易被忽视为蛋类过敏原"
+  },
+  {
+    "dish_name": "饺子",
+    "aliases": ["水饺", "蒸饺", "锅贴", "煎饺"],
+    "ingredients": ["面粉", "猪肉/牛肉/羊肉", "白菜/韭菜/芹菜", "葱", "姜", "酱油", "盐", "香油"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉(饺子皮)", "note": "饺子皮由小麦面粉制成"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "馅料调味含酱油"},
+      "shellfish": {"direct": false, "ingredient": "虾仁(部分馅料)", "note": "虾仁馅饺子含甲壳类过敏原"},
+      "egg": {"direct": false, "ingredient": "鸡蛋(部分馅料)", "note": "部分饺子馅含鸡蛋"}
+    },
+    "hidden_allergen_notes": "饺子馅料多样，需确认具体馅料成分以判断过敏原"
+  },
+  {
+    "dish_name": "月饼",
+    "aliases": ["广式月饼", "苏式月饼", "冰皮月饼"],
+    "ingredients": ["面粉", "糖浆", "油", "蛋黄", "莲蓉/豆沙/五仁(视馅料)"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉", "note": "月饼皮含小麦面粉"},
+      "egg": {"direct": true, "ingredient": "蛋黄", "note": "蛋黄月饼含鸡蛋过敏原"},
+      "peanut": {"direct": false, "ingredient": "五仁馅(含花生)", "note": "五仁月饼含花生"},
+      "tree_nut": {"direct": false, "ingredient": "五仁馅(含核桃/杏仁等)", "note": "五仁月饼含多种树坚果"},
+      "soy": {"direct": false, "ingredient": "豆沙馅", "note": "豆沙馅由红豆/绿豆制成，部分含大豆"}
+    },
+    "hidden_allergen_notes": "月饼馅料种类繁多，五仁月饼含花生和多种坚果，是高过敏原风险食品"
+  },
+  {
+    "dish_name": "XO酱炒菜",
+    "aliases": ["XO酱炒虾", "XO酱炒牛肉", "XO酱炒萝卜糕"],
+    "ingredients": ["主料(虾/牛肉等)", "XO酱", "蒜", "葱", "油"],
+    "allergens": {
+      "shellfish": {"direct": true, "ingredient": "XO酱(含干贝/虾米)", "note": "XO酱含干贝和虾米"},
+      "fish": {"direct": false, "ingredient": "XO酱(含鱼干)", "note": "部分XO酱含鱼干成分"}
+    },
+    "hidden_allergen_notes": "XO酱是高隐性过敏原调料，主要由干贝、虾米、火腿制成，含甲壳类和可能含鱼类过敏原"
+  },
+  {
+    "dish_name": "蚝油生菜",
+    "aliases": ["蚝油菜心", "蚝油西兰花", "蚝油时蔬"],
+    "ingredients": ["生菜/菜心", "蚝油", "蒜", "油"],
+    "allergens": {
+      "shellfish": {"direct": true, "ingredient": "蚝油(含牡蛎提取物)", "note": "蚝油由牡蛎提取物制成"},
+      "soy": {"direct": false, "ingredient": "蚝油(含酱油)", "note": "部分蚝油含酱油成分"}
+    },
+    "hidden_allergen_notes": "蚝油是常见的隐性甲壳类过敏原来源，由牡蛎浓缩而成"
+  },
+  {
+    "dish_name": "虾酱炒空心菜",
+    "aliases": ["虾酱通菜", "马来风光"],
+    "ingredients": ["空心菜", "虾酱", "蒜", "辣椒", "油"],
+    "allergens": {
+      "shellfish": {"direct": true, "ingredient": "虾酱", "note": "虾酱由虾发酵制成，含甲壳类过敏原"}
+    },
+    "hidden_allergen_notes": "虾酱是隐性甲壳类过敏原，外观为深色酱料，不易直接识别"
+  },
+  {
+    "dish_name": "意大利面",
+    "aliases": ["意面", "通心粉", "奶油培根意面", "番茄肉酱面", "carbonara"],
+    "ingredients": ["意大利面", "橄榄油", "大蒜", "奶油/番茄酱(视口味)", "培根/肉酱(可选)", "帕玛森芝士"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "意大利面", "note": "意面由硬质小麦制成"},
+      "milk": {"direct": true, "ingredient": "奶油/帕玛森芝士", "note": "奶油意面含乳制品"},
+      "egg": {"direct": false, "ingredient": "新鲜意面", "note": "新鲜手工意面通常含鸡蛋"}
+    },
+    "hidden_allergen_notes": "意面本身含麸质，奶油口味额外含乳制品，新鲜意面可能含鸡蛋"
+  },
+  {
+    "dish_name": "披萨",
+    "aliases": ["比萨", "Pizza", "意大利披萨"],
+    "ingredients": ["面粉", "酵母", "番茄酱", "马苏里拉芝士", "各种配料"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉(披萨饼底)", "note": "披萨饼底由小麦面粉制成"},
+      "milk": {"direct": true, "ingredient": "马苏里拉芝士", "note": "披萨含大量芝士"},
+      "shellfish": {"direct": false, "ingredient": "海鲜披萨配料", "note": "海鲜披萨含虾等甲壳类"},
+      "fish": {"direct": false, "ingredient": "金枪鱼披萨配料", "note": "部分披萨含鱼类"}
+    },
+    "hidden_allergen_notes": "披萨至少含麸质和乳制品两种过敏原，海鲜口味额外含甲壳类/鱼类"
+  },
+  {
+    "dish_name": "汤圆",
+    "aliases": ["元宵", "芝麻汤圆", "花生汤圆"],
+    "ingredients": ["糯米粉", "芝麻/花生/豆沙(馅料)", "糖", "猪油"],
+    "allergens": {
+      "peanut": {"direct": true, "ingredient": "花生馅", "note": "花生汤圆含花生过敏原"},
+      "tree_nut": {"direct": false, "ingredient": "芝麻馅", "note": "芝麻在部分标准中归为坚果类"}
+    },
+    "hidden_allergen_notes": "汤圆馅料中的花生和芝麻是主要隐性过敏原"
+  },
+  {
+    "dish_name": "春卷",
+    "aliases": ["炸春卷", "越南春卷"],
+    "ingredients": ["春卷皮(面粉)", "猪肉丝", "白菜/竹笋/木耳/胡萝卜", "虾仁(可选)", "酱油"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "春卷皮", "note": "春卷皮由小麦面粉制成"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "调味含酱油"},
+      "shellfish": {"direct": false, "ingredient": "虾仁(可选)", "note": "部分春卷含虾仁"},
+      "egg": {"direct": false, "ingredient": "蛋皮(部分)", "note": "部分春卷使用蛋皮包裹"}
+    },
+    "hidden_allergen_notes": "春卷馅料多样，需确认是否含虾仁等海鲜"
+  },
+  {
+    "dish_name": "照烧鸡",
+    "aliases": ["照烧鸡腿", "照烧鸡排", "日式照烧鸡"],
+    "ingredients": ["鸡肉", "酱油", "味醂", "糖", "清酒", "姜"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "酱油", "note": "照烧酱以酱油为基础"},
+      "wheat": {"direct": false, "ingredient": "酱油", "note": "日式酱油含小麦成分"}
+    },
+    "hidden_allergen_notes": "照烧酱的核心是酱油，含大豆和小麦过敏原"
+  },
+  {
+    "dish_name": "叻沙",
+    "aliases": ["Laksa", "新加坡叻沙", "马来叻沙"],
+    "ingredients": ["米粉/面条", "椰浆", "虾酱", "辣椒", "南姜", "香茅", "虾", "鱼糕", "豆芽"],
+    "allergens": {
+      "shellfish": {"direct": true, "ingredient": "虾/虾酱", "note": "叻沙含虾和虾酱"},
+      "fish": {"direct": true, "ingredient": "鱼糕", "note": "叻沙通常含鱼糕"},
+      "tree_nut": {"direct": false, "ingredient": "椰浆", "note": "椰子在部分标准中归为树坚果"},
+      "soy": {"direct": false, "ingredient": "豆芽/豆腐泡", "note": "部分叻沙含豆制品"}
+    },
+    "hidden_allergen_notes": "叻沙是多过敏原食品，虾酱和鱼糕是主要隐性过敏原来源"
+  },
+  {
+    "dish_name": "泰式炒河粉",
+    "aliases": ["Pad Thai", "泰式金边粉"],
+    "ingredients": ["河粉", "虾", "豆芽", "鸡蛋", "花生碎", "鱼露", "罗望子酱", "辣椒", "青柠"],
+    "allergens": {
+      "shellfish": {"direct": true, "ingredient": "虾", "note": "虾是该菜品的主要配料"},
+      "peanut": {"direct": true, "ingredient": "花生碎", "note": "花生碎是标配配料"},
+      "fish": {"direct": true, "ingredient": "鱼露", "note": "鱼露由鱼发酵制成"},
+      "egg": {"direct": true, "ingredient": "鸡蛋", "note": "炒制时加入鸡蛋"},
+      "soy": {"direct": false, "ingredient": "酱油(部分配方)", "note": "部分配方添加酱油"}
+    },
+    "hidden_allergen_notes": "泰式炒河粉含多种过敏原，鱼露和花生碎是主要隐性来源"
+  },
+  {
+    "dish_name": "麻辣火锅",
+    "aliases": ["四川火锅", "重庆火锅", "鸳鸯锅"],
+    "ingredients": ["牛油/植物油", "豆瓣酱", "花椒", "辣椒", "各种涮料"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "豆瓣酱/酱油", "note": "火锅底料含豆瓣酱"},
+      "peanut": {"direct": false, "ingredient": "花生酱蘸料", "note": "火锅蘸料常含花生酱"},
+      "shellfish": {"direct": false, "ingredient": "虾滑/鱼丸", "note": "常见涮料含海鲜"},
+      "milk": {"direct": false, "ingredient": "牛油底料", "note": "牛油非乳制品但需注意过敏体质"},
+      "egg": {"direct": false, "ingredient": "鹌鹑蛋", "note": "鹌鹑蛋是常见涮料"}
+    },
+    "hidden_allergen_notes": "火锅底料和蘸料含多种隐性过敏原，不同涮料增加过敏原种类"
+  },
+  {
+    "dish_name": "油条",
+    "aliases": ["炸油条", "老油条"],
+    "ingredients": ["面粉", "水", "盐", "泡打粉", "油"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉", "note": "油条由小麦面粉制成"},
+      "soy": {"direct": false, "ingredient": "大豆油(炸油)", "note": "通常使用大豆油炸制"}
+    },
+    "hidden_allergen_notes": "油条本身含小麦过敏原，通常与豆浆搭配（额外增加大豆过敏原）"
+  },
+  {
+    "dish_name": "番茄炒蛋",
+    "aliases": ["西红柿炒蛋", "西红柿鸡蛋"],
+    "ingredients": ["番茄", "鸡蛋", "葱", "盐", "糖", "油"],
+    "allergens": {
+      "egg": {"direct": true, "ingredient": "鸡蛋", "note": "鸡蛋是核心配料"}
+    },
+    "hidden_allergen_notes": "鸡蛋是该菜品的必需配料"
+  },
+  {
+    "dish_name": "清蒸鲈鱼",
+    "aliases": ["蒸鲈鱼", "清蒸鱼", "粤式蒸鱼"],
+    "ingredients": ["鲈鱼", "葱", "姜", "酱油", "油"],
+    "allergens": {
+      "fish": {"direct": true, "ingredient": "鲈鱼", "note": "鱼类是核心食材"},
+      "soy": {"direct": true, "ingredient": "酱油", "note": "蒸鱼豉油含大豆"}
+    },
+    "hidden_allergen_notes": "蒸鱼豉油是隐性大豆过敏原来源"
+  },
+  {
+    "dish_name": "回锅肉",
+    "aliases": ["回锅肉片"],
+    "ingredients": ["五花肉", "蒜苗", "豆瓣酱", "豆豉", "酱油", "糖", "油"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "豆瓣酱/豆豉/酱油", "note": "多种含大豆调料"},
+      "wheat": {"direct": false, "ingredient": "酱油", "note": "酱油可能含小麦成分"}
+    },
+    "hidden_allergen_notes": "回锅肉使用大量豆制调料（豆瓣酱、豆豉），大豆过敏原含量高"
+  },
+  {
+    "dish_name": "面包",
+    "aliases": ["吐司", "法棍", "全麦面包", "牛角面包"],
+    "ingredients": ["面粉", "酵母", "糖", "盐", "黄油/油", "牛奶(可选)", "鸡蛋(可选)"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉", "note": "面包由小麦面粉制成"},
+      "milk": {"direct": true, "ingredient": "黄油/牛奶", "note": "大多数面包含乳制品"},
+      "egg": {"direct": false, "ingredient": "鸡蛋(刷蛋液)", "note": "部分面包刷蛋液增色"},
+      "soy": {"direct": false, "ingredient": "大豆卵磷脂", "note": "工业面包常添加大豆卵磷脂"}
+    },
+    "hidden_allergen_notes": "面包至少含小麦过敏原，大多数还含乳制品，工业生产常添加大豆卵磷脂"
+  },
+  {
+    "dish_name": "冰淇淋",
+    "aliases": ["雪糕", "冰激凌", "gelato"],
+    "ingredients": ["牛奶", "奶油", "糖", "蛋黄(部分)", "各种口味原料"],
+    "allergens": {
+      "milk": {"direct": true, "ingredient": "牛奶/奶油", "note": "乳制品是冰淇淋的核心成分"},
+      "egg": {"direct": false, "ingredient": "蛋黄(部分配方)", "note": "传统配方含蛋黄"},
+      "peanut": {"direct": false, "ingredient": "花生口味/花生碎", "note": "花生口味冰淇淋含花生"},
+      "tree_nut": {"direct": false, "ingredient": "坚果口味/碎粒", "note": "坚果口味含树坚果"}
+    },
+    "hidden_allergen_notes": "冰淇淋至少含乳制品，不同口味增加不同过敏原（花生、坚果等）"
+  },
+  {
+    "dish_name": "巧克力",
+    "aliases": ["黑巧克力", "牛奶巧克力", "白巧克力"],
+    "ingredients": ["可可", "糖", "可可脂", "牛奶(牛奶/白巧克力)"],
+    "allergens": {
+      "milk": {"direct": true, "ingredient": "牛奶(牛奶巧克力/白巧克力)", "note": "牛奶巧克力和白巧克力含乳制品"},
+      "soy": {"direct": false, "ingredient": "大豆卵磷脂", "note": "大部分巧克力含大豆卵磷脂作为乳化剂"},
+      "tree_nut": {"direct": false, "ingredient": "坚果(部分产品)", "note": "坚果巧克力含树坚果"},
+      "peanut": {"direct": false, "ingredient": "花生(部分产品)", "note": "花生巧克力含花生"}
+    },
+    "hidden_allergen_notes": "巧克力生产线常有坚果交叉污染风险，大豆卵磷脂是常见隐性过敏原"
+  },
+  {
+    "dish_name": "酸辣汤",
+    "aliases": ["酸辣汤羹", "四川酸辣汤"],
+    "ingredients": ["豆腐", "木耳", "鸡蛋", "猪肉丝", "醋", "酱油", "胡椒粉", "淀粉"],
+    "allergens": {
+      "egg": {"direct": true, "ingredient": "鸡蛋(蛋花)", "note": "酸辣汤打蛋花"},
+      "soy": {"direct": true, "ingredient": "豆腐/酱油", "note": "含豆腐和酱油"},
+      "wheat": {"direct": false, "ingredient": "酱油/淀粉", "note": "酱油和淀粉可能含小麦"}
+    },
+    "hidden_allergen_notes": "酸辣汤中的蛋花和豆腐分别含蛋类和大豆过敏原"
+  },
+  {
+    "dish_name": "味噌汤",
+    "aliases": ["日式味噌汤", "miso soup"],
+    "ingredients": ["味噌", "豆腐", "海带", "葱", "鱼干高汤"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "味噌/豆腐", "note": "味噌由大豆发酵制成"},
+      "fish": {"direct": true, "ingredient": "鱼干高汤(�的鱼/柴鱼)", "note": "传统味噌汤使用�的鱼高汤"},
+      "wheat": {"direct": false, "ingredient": "味噌(部分)", "note": "部分味噌含大麦或小麦"}
+    },
+    "hidden_allergen_notes": "味噌汤的鱼干高汤是隐性鱼类过敏原，味噌本身含大豆"
+  },
+  {
+    "dish_name": "凯撒沙拉",
+    "aliases": ["Caesar Salad"],
+    "ingredients": ["罗马生菜", "凯撒酱", "面包丁", "帕玛森芝士", "培根(可选)"],
+    "allergens": {
+      "fish": {"direct": true, "ingredient": "凯撒酱(含鱼露/鲮鱼)", "note": "传统凯撒酱含鱼露或鲮鱼"},
+      "egg": {"direct": true, "ingredient": "凯撒酱(含蛋黄)", "note": "凯撒酱含蛋黄"},
+      "milk": {"direct": true, "ingredient": "帕玛森芝士", "note": "含帕玛森芝士"},
+      "wheat": {"direct": true, "ingredient": "面包丁", "note": "面包丁含小麦"}
+    },
+    "hidden_allergen_notes": "凯撒酱含鱼露（鱼类过敏原）和蛋黄（蛋类过敏原），是高隐性过敏原调料"
+  },
+  {
+    "dish_name": "天妇罗",
+    "aliases": ["炸虾天妇罗", "日式炸物"],
+    "ingredients": ["虾/蔬菜", "面粉", "鸡蛋", "冰水", "天妇罗蘸汁(酱油基)"],
+    "allergens": {
+      "wheat": {"direct": true, "ingredient": "面粉(面衣)", "note": "天妇罗面衣含小麦面粉"},
+      "egg": {"direct": true, "ingredient": "鸡蛋(面衣)", "note": "面衣含鸡蛋"},
+      "shellfish": {"direct": true, "ingredient": "虾", "note": "炸虾天妇罗含虾"},
+      "soy": {"direct": true, "ingredient": "蘸汁(酱油)", "note": "天妇罗蘸汁含酱油"}
+    },
+    "hidden_allergen_notes": "天妇罗面衣同时含小麦和鸡蛋，蘸汁含大豆"
+  },
+  {
+    "dish_name": "红烧排骨",
+    "aliases": ["排骨", "红烧猪排", "糖醋排骨"],
+    "ingredients": ["排骨", "酱油", "老抽", "冰糖", "料酒", "葱", "姜", "八角"],
+    "allergens": {
+      "soy": {"direct": true, "ingredient": "酱油/老抽", "note": "调味用酱油含大豆"},
+      "wheat": {"direct": false, "ingredient": "酱油", "note": "酱油可能含小麦成分"}
+    },
+    "hidden_allergen_notes": "红烧类菜品的酱油是主要隐性大豆过敏原来源"
+  },
+  {
+    "dish_name": "奶茶",
+    "aliases": ["珍珠奶茶", "波霸奶茶", "港式奶茶"],
+    "ingredients": ["红茶", "牛奶/奶精", "糖", "珍珠(木薯粉)"],
+    "allergens": {
+      "milk": {"direct": true, "ingredient": "牛奶/奶精", "note": "奶茶含牛奶或奶制品"},
+      "soy": {"direct": false, "ingredient": "奶精(部分含大豆)", "note": "植脂末/奶精可能含大豆成分"}
+    },
+    "hidden_allergen_notes": "奶精（植脂末）可能含大豆成分，即使标注'奶茶'也可能不含真正牛奶但含大豆"
+  }
+]

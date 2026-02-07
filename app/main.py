@@ -15,6 +15,8 @@ from app.routers import food_router
 from app.routers import user as user_router
 from app.routers import trip as trip_router
 from app.routers import weather as weather_router
+from app.routers import stats as stats_router
+from app.routers import exercise as exercise_router
 
 # 导入数据库
 from app.database import check_db_connection, init_db
@@ -64,6 +66,8 @@ app.include_router(food_router)
 app.include_router(user_router.router)
 app.include_router(trip_router.router)
 app.include_router(weather_router.router)
+app.include_router(stats_router.router)
+app.include_router(exercise_router.router)
 
 
 @app.get("/")

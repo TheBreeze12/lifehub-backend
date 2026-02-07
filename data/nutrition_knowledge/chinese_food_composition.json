@@ -1,0 +1,869 @@
+[
+  {
+    "food_name": "大米饭（粳米）",
+    "aliases": ["米饭", "白米饭", "粳米饭", "蒸米饭"],
+    "category": "谷薯类",
+    "per_100g": {
+      "calories": 116.0,
+      "protein": 2.6,
+      "fat": 0.3,
+      "carbs": 25.9,
+      "fiber": 0.3,
+      "sodium": 2.0,
+      "calcium": 7.0,
+      "iron": 0.3
+    },
+    "common_serving": "一碗约200g",
+    "cooking_notes": "蒸煮后热量为干米的约40%"
+  },
+  {
+    "food_name": "面条（煮）",
+    "aliases": ["面条", "挂面", "汤面", "拌面"],
+    "category": "谷薯类",
+    "per_100g": {
+      "calories": 110.0,
+      "protein": 3.4,
+      "fat": 0.5,
+      "carbs": 23.0,
+      "fiber": 0.9,
+      "sodium": 50.0,
+      "calcium": 8.0,
+      "iron": 0.6
+    },
+    "common_serving": "一碗约300g",
+    "cooking_notes": "含小麦（麸质），过敏人群注意"
+  },
+  {
+    "food_name": "馒头",
+    "aliases": ["白馒头", "蒸馒头"],
+    "category": "谷薯类",
+    "per_100g": {
+      "calories": 221.0,
+      "protein": 7.0,
+      "fat": 1.1,
+      "carbs": 45.7,
+      "fiber": 1.3,
+      "sodium": 188.0,
+      "calcium": 38.0,
+      "iron": 1.8
+    },
+    "common_serving": "一个约100g",
+    "cooking_notes": "含小麦（麸质）"
+  },
+  {
+    "food_name": "番茄炒蛋",
+    "aliases": ["西红柿炒蛋", "西红柿鸡蛋"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 86.0,
+      "protein": 5.2,
+      "fat": 5.8,
+      "carbs": 3.8,
+      "fiber": 0.5,
+      "sodium": 280.0,
+      "calcium": 28.0,
+      "iron": 1.0
+    },
+    "common_serving": "一份约250g",
+    "cooking_notes": "鸡蛋为蛋类过敏原；可减少用油量降低脂肪"
+  },
+  {
+    "food_name": "宫保鸡丁",
+    "aliases": ["宫爆鸡丁"],
+    "category": "川菜",
+    "per_100g": {
+      "calories": 162.0,
+      "protein": 14.8,
+      "fat": 9.2,
+      "carbs": 5.1,
+      "fiber": 0.8,
+      "sodium": 620.0,
+      "calcium": 18.0,
+      "iron": 1.2
+    },
+    "common_serving": "一份约300g",
+    "cooking_notes": "含花生（花生过敏原）和酱油（大豆过敏原）"
+  },
+  {
+    "food_name": "红烧肉",
+    "aliases": ["东坡肉", "红烧五花肉"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 268.0,
+      "protein": 12.5,
+      "fat": 22.8,
+      "carbs": 3.6,
+      "fiber": 0.0,
+      "sodium": 580.0,
+      "calcium": 8.0,
+      "iron": 1.5
+    },
+    "common_serving": "一份约200g",
+    "cooking_notes": "高脂肪高热量，含酱油（大豆过敏原）"
+  },
+  {
+    "food_name": "清蒸鲈鱼",
+    "aliases": ["蒸鲈鱼", "清蒸鱼"],
+    "category": "海鲜/水产",
+    "per_100g": {
+      "calories": 105.0,
+      "protein": 18.6,
+      "fat": 3.4,
+      "carbs": 0.0,
+      "fiber": 0.0,
+      "sodium": 310.0,
+      "calcium": 138.0,
+      "iron": 0.5
+    },
+    "common_serving": "一条约500g（可食部分约300g）",
+    "cooking_notes": "鱼类过敏原；高蛋白低脂肪，适合减脂"
+  },
+  {
+    "food_name": "麻婆豆腐",
+    "aliases": ["麻辣豆腐"],
+    "category": "川菜",
+    "per_100g": {
+      "calories": 111.0,
+      "protein": 7.2,
+      "fat": 7.5,
+      "carbs": 4.3,
+      "fiber": 0.4,
+      "sodium": 580.0,
+      "calcium": 96.0,
+      "iron": 2.8
+    },
+    "common_serving": "一份约300g",
+    "cooking_notes": "含大豆（大豆过敏原）；钙含量较高"
+  },
+  {
+    "food_name": "鸡蛋",
+    "aliases": ["煮鸡蛋", "水煮蛋", "白煮蛋", "鸡蛋（煮）"],
+    "category": "蛋类",
+    "per_100g": {
+      "calories": 144.0,
+      "protein": 13.3,
+      "fat": 8.8,
+      "carbs": 2.8,
+      "fiber": 0.0,
+      "sodium": 131.0,
+      "calcium": 56.0,
+      "iron": 2.0
+    },
+    "common_serving": "一个约50g",
+    "cooking_notes": "蛋类过敏原；优质蛋白质来源"
+  },
+  {
+    "food_name": "鸡胸肉",
+    "aliases": ["鸡胸", "鸡脯肉", "鸡胸肉（煮）"],
+    "category": "肉类",
+    "per_100g": {
+      "calories": 133.0,
+      "protein": 31.4,
+      "fat": 1.2,
+      "carbs": 0.0,
+      "fiber": 0.0,
+      "sodium": 64.0,
+      "calcium": 11.0,
+      "iron": 0.4
+    },
+    "common_serving": "一块约150g",
+    "cooking_notes": "高蛋白低脂，减脂增肌首选"
+  },
+  {
+    "food_name": "猪里脊",
+    "aliases": ["里脊肉", "瘦肉"],
+    "category": "肉类",
+    "per_100g": {
+      "calories": 155.0,
+      "protein": 20.2,
+      "fat": 7.9,
+      "carbs": 1.5,
+      "fiber": 0.0,
+      "sodium": 44.0,
+      "calcium": 6.0,
+      "iron": 1.5
+    },
+    "common_serving": "一份约150g",
+    "cooking_notes": "相比五花肉脂肪低很多"
+  },
+  {
+    "food_name": "五花肉",
+    "aliases": ["猪五花", "猪腹肉"],
+    "category": "肉类",
+    "per_100g": {
+      "calories": 395.0,
+      "protein": 8.9,
+      "fat": 39.3,
+      "carbs": 0.5,
+      "fiber": 0.0,
+      "sodium": 56.0,
+      "calcium": 6.0,
+      "iron": 0.8
+    },
+    "common_serving": "一份约100g",
+    "cooking_notes": "高脂肪，减脂期慎选"
+  },
+  {
+    "food_name": "牛腩",
+    "aliases": ["牛肉", "炖牛肉"],
+    "category": "肉类",
+    "per_100g": {
+      "calories": 190.0,
+      "protein": 19.5,
+      "fat": 12.3,
+      "carbs": 0.0,
+      "fiber": 0.0,
+      "sodium": 53.0,
+      "calcium": 9.0,
+      "iron": 2.8
+    },
+    "common_serving": "一份约150g",
+    "cooking_notes": "铁含量较高，适合补铁"
+  },
+  {
+    "food_name": "三文鱼",
+    "aliases": ["鲑鱼", "三文鱼刺身"],
+    "category": "海鲜/水产",
+    "per_100g": {
+      "calories": 139.0,
+      "protein": 17.2,
+      "fat": 7.8,
+      "carbs": 0.0,
+      "fiber": 0.0,
+      "sodium": 59.0,
+      "calcium": 9.0,
+      "iron": 0.3
+    },
+    "common_serving": "一份约100g",
+    "cooking_notes": "鱼类过敏原；富含Omega-3脂肪酸"
+  },
+  {
+    "food_name": "虾仁",
+    "aliases": ["虾", "大虾", "白虾", "基围虾"],
+    "category": "海鲜/水产",
+    "per_100g": {
+      "calories": 48.0,
+      "protein": 10.4,
+      "fat": 0.5,
+      "carbs": 0.1,
+      "fiber": 0.0,
+      "sodium": 302.0,
+      "calcium": 62.0,
+      "iron": 1.5
+    },
+    "common_serving": "一份约150g",
+    "cooking_notes": "甲壳类过敏原；高蛋白低脂低热量"
+  },
+  {
+    "food_name": "豆腐",
+    "aliases": ["北豆腐", "嫩豆腐", "老豆腐"],
+    "category": "豆制品",
+    "per_100g": {
+      "calories": 81.0,
+      "protein": 8.1,
+      "fat": 3.7,
+      "carbs": 4.2,
+      "fiber": 0.4,
+      "sodium": 7.0,
+      "calcium": 164.0,
+      "iron": 1.9
+    },
+    "common_serving": "一块约200g",
+    "cooking_notes": "大豆过敏原；优质植物蛋白，钙含量高"
+  },
+  {
+    "food_name": "西兰花",
+    "aliases": ["花椰菜", "绿花菜"],
+    "category": "蔬菜类",
+    "per_100g": {
+      "calories": 33.0,
+      "protein": 4.1,
+      "fat": 0.6,
+      "carbs": 4.3,
+      "fiber": 1.6,
+      "sodium": 18.0,
+      "calcium": 67.0,
+      "iron": 1.0
+    },
+    "common_serving": "一份约200g",
+    "cooking_notes": "高纤维低热量，维生素C含量丰富"
+  },
+  {
+    "food_name": "菠菜",
+    "aliases": ["菠菜（煮）", "炒菠菜"],
+    "category": "蔬菜类",
+    "per_100g": {
+      "calories": 24.0,
+      "protein": 2.6,
+      "fat": 0.3,
+      "carbs": 3.6,
+      "fiber": 1.7,
+      "sodium": 85.0,
+      "calcium": 66.0,
+      "iron": 2.9
+    },
+    "common_serving": "一份约200g",
+    "cooking_notes": "铁和钙含量较高，但草酸含量也高，建议焯水"
+  },
+  {
+    "food_name": "黄瓜",
+    "aliases": ["凉拌黄瓜", "拍黄瓜"],
+    "category": "蔬菜类",
+    "per_100g": {
+      "calories": 15.0,
+      "protein": 0.8,
+      "fat": 0.2,
+      "carbs": 2.9,
+      "fiber": 0.5,
+      "sodium": 4.0,
+      "calcium": 24.0,
+      "iron": 0.5
+    },
+    "common_serving": "一根约200g",
+    "cooking_notes": "极低热量蔬菜，适合减脂"
+  },
+  {
+    "food_name": "番茄",
+    "aliases": ["西红柿"],
+    "category": "蔬菜类",
+    "per_100g": {
+      "calories": 19.0,
+      "protein": 0.9,
+      "fat": 0.2,
+      "carbs": 4.0,
+      "fiber": 0.5,
+      "sodium": 5.0,
+      "calcium": 10.0,
+      "iron": 0.4
+    },
+    "common_serving": "一个约150g",
+    "cooking_notes": "富含番茄红素，加油烹饪更易吸收"
+  },
+  {
+    "food_name": "土豆",
+    "aliases": ["马铃薯", "洋芋", "土豆（蒸）"],
+    "category": "谷薯类",
+    "per_100g": {
+      "calories": 76.0,
+      "protein": 2.0,
+      "fat": 0.2,
+      "carbs": 17.2,
+      "fiber": 0.7,
+      "sodium": 2.0,
+      "calcium": 8.0,
+      "iron": 0.8
+    },
+    "common_serving": "一个约150g",
+    "cooking_notes": "淀粉含量较高，可替代部分主食"
+  },
+  {
+    "food_name": "红薯",
+    "aliases": ["地瓜", "番薯", "烤红薯"],
+    "category": "谷薯类",
+    "per_100g": {
+      "calories": 99.0,
+      "protein": 1.1,
+      "fat": 0.2,
+      "carbs": 24.7,
+      "fiber": 1.6,
+      "sodium": 28.0,
+      "calcium": 23.0,
+      "iron": 0.5
+    },
+    "common_serving": "一个约200g",
+    "cooking_notes": "膳食纤维丰富，升糖指数中等"
+  },
+  {
+    "food_name": "苹果",
+    "aliases": ["红苹果", "青苹果"],
+    "category": "水果类",
+    "per_100g": {
+      "calories": 52.0,
+      "protein": 0.2,
+      "fat": 0.2,
+      "carbs": 13.5,
+      "fiber": 1.2,
+      "sodium": 1.6,
+      "calcium": 4.0,
+      "iron": 0.6
+    },
+    "common_serving": "一个约200g",
+    "cooking_notes": "膳食纤维丰富，适合作为加餐"
+  },
+  {
+    "food_name": "香蕉",
+    "aliases": ["芭蕉"],
+    "category": "水果类",
+    "per_100g": {
+      "calories": 89.0,
+      "protein": 1.4,
+      "fat": 0.2,
+      "carbs": 22.0,
+      "fiber": 1.2,
+      "sodium": 0.8,
+      "calcium": 7.0,
+      "iron": 0.4
+    },
+    "common_serving": "一根约120g（可食部分）",
+    "cooking_notes": "快速补充能量，运动前后适宜"
+  },
+  {
+    "food_name": "牛奶",
+    "aliases": ["纯牛奶", "全脂牛奶", "鲜牛奶"],
+    "category": "乳制品",
+    "per_100g": {
+      "calories": 54.0,
+      "protein": 3.0,
+      "fat": 3.2,
+      "carbs": 3.4,
+      "fiber": 0.0,
+      "sodium": 37.0,
+      "calcium": 104.0,
+      "iron": 0.3
+    },
+    "common_serving": "一杯约250ml",
+    "cooking_notes": "乳制品过敏原；优质钙来源"
+  },
+  {
+    "food_name": "酸奶",
+    "aliases": ["纯酸奶", "原味酸奶"],
+    "category": "乳制品",
+    "per_100g": {
+      "calories": 72.0,
+      "protein": 2.5,
+      "fat": 2.7,
+      "carbs": 9.3,
+      "fiber": 0.0,
+      "sodium": 39.0,
+      "calcium": 118.0,
+      "iron": 0.1
+    },
+    "common_serving": "一杯约200g",
+    "cooking_notes": "乳制品过敏原；含益生菌有助消化"
+  },
+  {
+    "food_name": "鱼香肉丝",
+    "aliases": ["鱼香肉丝盖饭"],
+    "category": "川菜",
+    "per_100g": {
+      "calories": 138.0,
+      "protein": 10.5,
+      "fat": 8.2,
+      "carbs": 6.0,
+      "fiber": 1.0,
+      "sodium": 650.0,
+      "calcium": 15.0,
+      "iron": 1.0
+    },
+    "common_serving": "一份约250g",
+    "cooking_notes": "含酱油（大豆过敏原），钠含量偏高"
+  },
+  {
+    "food_name": "回锅肉",
+    "aliases": ["回锅肉片"],
+    "category": "川菜",
+    "per_100g": {
+      "calories": 186.0,
+      "protein": 11.5,
+      "fat": 14.0,
+      "carbs": 3.8,
+      "fiber": 0.6,
+      "sodium": 710.0,
+      "calcium": 12.0,
+      "iron": 1.0
+    },
+    "common_serving": "一份约250g",
+    "cooking_notes": "含豆瓣酱（大豆过敏原），高盐高脂"
+  },
+  {
+    "food_name": "水煮牛肉",
+    "aliases": ["水煮肉片"],
+    "category": "川菜",
+    "per_100g": {
+      "calories": 154.0,
+      "protein": 14.5,
+      "fat": 9.8,
+      "carbs": 2.0,
+      "fiber": 0.5,
+      "sodium": 590.0,
+      "calcium": 15.0,
+      "iron": 2.2
+    },
+    "common_serving": "一份约350g",
+    "cooking_notes": "实际油脂含量高于表面数据，浮油建议撇去"
+  },
+  {
+    "food_name": "糖醋里脊",
+    "aliases": ["糖醋肉", "糖醋排骨"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 196.0,
+      "protein": 12.0,
+      "fat": 10.5,
+      "carbs": 14.0,
+      "fiber": 0.1,
+      "sodium": 350.0,
+      "calcium": 10.0,
+      "iron": 1.0
+    },
+    "common_serving": "一份约250g",
+    "cooking_notes": "含小麦淀粉（麸质），糖分较高，减脂期慎选"
+  },
+  {
+    "food_name": "蛋炒饭",
+    "aliases": ["炒饭", "扬州炒饭"],
+    "category": "主食",
+    "per_100g": {
+      "calories": 178.0,
+      "protein": 5.8,
+      "fat": 6.5,
+      "carbs": 24.0,
+      "fiber": 0.4,
+      "sodium": 380.0,
+      "calcium": 18.0,
+      "iron": 0.8
+    },
+    "common_serving": "一份约350g",
+    "cooking_notes": "含鸡蛋（蛋类过敏原）和酱油（大豆过敏原）"
+  },
+  {
+    "food_name": "饺子（猪肉白菜）",
+    "aliases": ["水饺", "蒸饺", "猪肉饺子"],
+    "category": "主食",
+    "per_100g": {
+      "calories": 183.0,
+      "protein": 8.3,
+      "fat": 6.2,
+      "carbs": 23.5,
+      "fiber": 1.0,
+      "sodium": 420.0,
+      "calcium": 25.0,
+      "iron": 1.2
+    },
+    "common_serving": "10个约300g",
+    "cooking_notes": "含小麦面皮（麸质过敏原）"
+  },
+  {
+    "food_name": "油条",
+    "aliases": ["炸油条"],
+    "category": "谷薯类",
+    "per_100g": {
+      "calories": 388.0,
+      "protein": 6.9,
+      "fat": 17.6,
+      "carbs": 51.0,
+      "fiber": 0.9,
+      "sodium": 585.0,
+      "calcium": 43.0,
+      "iron": 2.3
+    },
+    "common_serving": "一根约80g",
+    "cooking_notes": "含小麦（麸质）和大豆，高油脂高钠"
+  },
+  {
+    "food_name": "豆浆",
+    "aliases": ["原味豆浆", "无糖豆浆"],
+    "category": "豆制品",
+    "per_100g": {
+      "calories": 31.0,
+      "protein": 1.8,
+      "fat": 0.7,
+      "carbs": 3.3,
+      "fiber": 1.1,
+      "sodium": 2.0,
+      "calcium": 10.0,
+      "iron": 0.5
+    },
+    "common_serving": "一杯约300ml",
+    "cooking_notes": "大豆过敏原；植物蛋白来源"
+  },
+  {
+    "food_name": "花生米",
+    "aliases": ["花生", "油炸花生", "盐水花生"],
+    "category": "坚果类",
+    "per_100g": {
+      "calories": 563.0,
+      "protein": 24.8,
+      "fat": 44.3,
+      "carbs": 21.7,
+      "fiber": 5.5,
+      "sodium": 2.0,
+      "calcium": 36.0,
+      "iron": 1.5
+    },
+    "common_serving": "一小把约30g",
+    "cooking_notes": "花生过敏原；高热量高脂肪，控制食用量"
+  },
+  {
+    "food_name": "核桃",
+    "aliases": ["核桃仁", "山核桃"],
+    "category": "坚果类",
+    "per_100g": {
+      "calories": 627.0,
+      "protein": 14.9,
+      "fat": 58.8,
+      "carbs": 19.1,
+      "fiber": 9.5,
+      "sodium": 6.0,
+      "calcium": 56.0,
+      "iron": 2.7
+    },
+    "common_serving": "2-3个约30g",
+    "cooking_notes": "树坚果过敏原；富含不饱和脂肪酸"
+  },
+  {
+    "food_name": "面包（白面包）",
+    "aliases": ["吐司", "切片面包"],
+    "category": "谷薯类",
+    "per_100g": {
+      "calories": 266.0,
+      "protein": 8.3,
+      "fat": 1.1,
+      "carbs": 53.3,
+      "fiber": 1.3,
+      "sodium": 459.0,
+      "calcium": 49.0,
+      "iron": 2.4
+    },
+    "common_serving": "一片约35g",
+    "cooking_notes": "含小麦（麸质）和可能含乳制品、鸡蛋"
+  },
+  {
+    "food_name": "可乐",
+    "aliases": ["碳酸饮料"],
+    "category": "饮料",
+    "per_100g": {
+      "calories": 43.0,
+      "protein": 0.0,
+      "fat": 0.0,
+      "carbs": 10.6,
+      "fiber": 0.0,
+      "sodium": 3.0,
+      "calcium": 1.0,
+      "iron": 0.0
+    },
+    "common_serving": "一罐330ml",
+    "cooking_notes": "纯糖分饮料，无营养价值，控糖人群避免"
+  },
+  {
+    "food_name": "啤酒",
+    "aliases": ["普通啤酒"],
+    "category": "饮料",
+    "per_100g": {
+      "calories": 32.0,
+      "protein": 0.4,
+      "fat": 0.0,
+      "carbs": 3.1,
+      "fiber": 0.0,
+      "sodium": 6.0,
+      "calcium": 6.0,
+      "iron": 0.1
+    },
+    "common_serving": "一瓶500ml",
+    "cooking_notes": "含小麦（麸质），酒精额外产热7kcal/g"
+  },
+  {
+    "food_name": "青椒炒肉",
+    "aliases": ["辣椒炒肉", "小炒肉"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 120.0,
+      "protein": 10.8,
+      "fat": 7.2,
+      "carbs": 3.0,
+      "fiber": 0.8,
+      "sodium": 480.0,
+      "calcium": 12.0,
+      "iron": 1.0
+    },
+    "common_serving": "一份约250g",
+    "cooking_notes": "含酱油（大豆过敏原）"
+  },
+  {
+    "food_name": "清炒时蔬",
+    "aliases": ["炒青菜", "清炒小白菜", "炒油菜"],
+    "category": "蔬菜类",
+    "per_100g": {
+      "calories": 45.0,
+      "protein": 1.5,
+      "fat": 3.0,
+      "carbs": 3.2,
+      "fiber": 1.2,
+      "sodium": 350.0,
+      "calcium": 50.0,
+      "iron": 1.5
+    },
+    "common_serving": "一份约200g",
+    "cooking_notes": "低热量，注意控制烹饪用油量"
+  },
+  {
+    "food_name": "红烧排骨",
+    "aliases": ["排骨", "红烧猪排"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 245.0,
+      "protein": 15.0,
+      "fat": 18.5,
+      "carbs": 4.2,
+      "fiber": 0.0,
+      "sodium": 520.0,
+      "calcium": 35.0,
+      "iron": 1.0
+    },
+    "common_serving": "一份约300g",
+    "cooking_notes": "含酱油（大豆过敏原），脂肪含量较高"
+  },
+  {
+    "food_name": "酸辣土豆丝",
+    "aliases": ["炒土豆丝", "醋溜土豆丝"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 68.0,
+      "protein": 1.5,
+      "fat": 3.0,
+      "carbs": 9.5,
+      "fiber": 0.8,
+      "sodium": 420.0,
+      "calcium": 10.0,
+      "iron": 0.6
+    },
+    "common_serving": "一份约250g",
+    "cooking_notes": "低热量家常菜，适合减脂"
+  },
+  {
+    "food_name": "蒜蓉西兰花",
+    "aliases": ["白灼西兰花", "蒜蓉花椰菜"],
+    "category": "蔬菜类",
+    "per_100g": {
+      "calories": 48.0,
+      "protein": 3.8,
+      "fat": 2.0,
+      "carbs": 4.5,
+      "fiber": 1.5,
+      "sodium": 280.0,
+      "calcium": 60.0,
+      "iron": 0.9
+    },
+    "common_serving": "一份约200g",
+    "cooking_notes": "低热量高纤维，健身餐常见搭配"
+  },
+  {
+    "food_name": "烤鸡翅",
+    "aliases": ["鸡翅", "奥尔良鸡翅", "炸鸡翅"],
+    "category": "肉类",
+    "per_100g": {
+      "calories": 223.0,
+      "protein": 17.4,
+      "fat": 16.8,
+      "carbs": 1.3,
+      "fiber": 0.0,
+      "sodium": 480.0,
+      "calcium": 8.0,
+      "iron": 0.8
+    },
+    "common_serving": "3个约150g",
+    "cooking_notes": "带皮鸡翅脂肪含量高，油炸更甚"
+  },
+  {
+    "food_name": "皮蛋瘦肉粥",
+    "aliases": ["皮蛋粥", "瘦肉粥"],
+    "category": "主食",
+    "per_100g": {
+      "calories": 48.0,
+      "protein": 2.8,
+      "fat": 1.5,
+      "carbs": 6.5,
+      "fiber": 0.1,
+      "sodium": 280.0,
+      "calcium": 12.0,
+      "iron": 0.4
+    },
+    "common_serving": "一碗约350g",
+    "cooking_notes": "含鸡蛋（蛋类过敏原，皮蛋由鸭蛋制成）"
+  },
+  {
+    "food_name": "沙茶酱牛肉",
+    "aliases": ["沙茶牛肉"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 175.0,
+      "protein": 16.0,
+      "fat": 10.5,
+      "carbs": 4.5,
+      "fiber": 0.3,
+      "sodium": 620.0,
+      "calcium": 12.0,
+      "iron": 2.5
+    },
+    "common_serving": "一份约250g",
+    "cooking_notes": "沙茶酱含花生（花生过敏原）和虾酱（甲壳类过敏原），隐性过敏原风险高"
+  },
+  {
+    "food_name": "咖喱鸡",
+    "aliases": ["咖喱鸡肉", "黄咖喱鸡"],
+    "category": "家常菜",
+    "per_100g": {
+      "calories": 135.0,
+      "protein": 12.0,
+      "fat": 7.5,
+      "carbs": 5.0,
+      "fiber": 0.8,
+      "sodium": 480.0,
+      "calcium": 20.0,
+      "iron": 1.2
+    },
+    "common_serving": "一份约300g",
+    "cooking_notes": "部分咖喱酱含乳制品和花生"
+  },
+  {
+    "food_name": "蛋糕（奶油）",
+    "aliases": ["生日蛋糕", "奶油蛋糕", "慕斯蛋糕"],
+    "category": "糕点",
+    "per_100g": {
+      "calories": 348.0,
+      "protein": 4.6,
+      "fat": 16.0,
+      "carbs": 47.5,
+      "fiber": 0.3,
+      "sodium": 195.0,
+      "calcium": 48.0,
+      "iron": 0.6
+    },
+    "common_serving": "一块约80g",
+    "cooking_notes": "含小麦（麸质）、鸡蛋（蛋类）、乳制品，高糖高脂"
+  },
+  {
+    "food_name": "炸酱面",
+    "aliases": ["老北京炸酱面"],
+    "category": "主食",
+    "per_100g": {
+      "calories": 152.0,
+      "protein": 6.5,
+      "fat": 4.8,
+      "carbs": 22.0,
+      "fiber": 1.2,
+      "sodium": 520.0,
+      "calcium": 18.0,
+      "iron": 1.0
+    },
+    "common_serving": "一碗约400g",
+    "cooking_notes": "含小麦面条（麸质）和黄酱/甜面酱（大豆过敏原）"
+  },
+  {
+    "food_name": "寿司",
+    "aliases": ["手卷寿司", "三文鱼寿司", "日本寿司"],
+    "category": "日料",
+    "per_100g": {
+      "calories": 145.0,
+      "protein": 5.2,
+      "fat": 2.0,
+      "carbs": 28.0,
+      "fiber": 0.3,
+      "sodium": 380.0,
+      "calcium": 8.0,
+      "iron": 0.5
+    },
+    "common_serving": "6个约180g",
+    "cooking_notes": "可能含鱼类、甲壳类、大豆（酱油、海苔）等多种过敏原"
+  }
+]
