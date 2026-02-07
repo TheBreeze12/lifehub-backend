@@ -237,6 +237,7 @@ class AIService:
 4. 特别注意推理隐性过敏原（如：宫保鸡丁通常含花生；蛋炒饭含鸡蛋；炸酱面含小麦和大豆等）
 5. 只返回JSON，不要其他解释
 6. 如果有参考数据，营养数值应与参考数据接近
+7. 列出该食材/菜品在2-4种不同烹饪方式下的热量和脂肪对比（如清蒸、红烧、油炸、水煮等），帮助用户选择更健康的烹饪方式
 
 八大类过敏原代码对照：
 - milk: 乳制品（牛奶、奶酪、黄油、奶油等）
@@ -256,7 +257,10 @@ class AIService:
     "carbs": 碳水化合物数值（克，浮点数）,
     "recommendation": "给减脂人群的建议（50字以内）",
     "allergens": ["过敏原代码列表，如peanut, egg等"],
-    "allergen_reasoning": "过敏原推理说明（说明为什么这道菜可能含有这些过敏原，100字以内）"
+    "allergen_reasoning": "过敏原推理说明（说明为什么这道菜可能含有这些过敏原，100字以内）",
+    "cooking_method_comparisons": [
+        {{"method": "烹饪方式名称", "calories": 热量浮点数, "fat": 脂肪浮点数, "description": "简要说明（20字以内）"}}
+    ]
 }}
 
 示例1（宫保鸡丁）：
@@ -267,7 +271,12 @@ class AIService:
     "carbs": 8.0,
     "recommendation": "蛋白质丰富，但花生热量较高，建议适量食用。",
     "allergens": ["peanut", "soy"],
-    "allergen_reasoning": "宫保鸡丁是经典川菜，主要配料包括花生米（花生过敏原），调味通常使用酱油（大豆过敏原）。"
+    "allergen_reasoning": "宫保鸡丁是经典川菜，主要配料包括花生米（花生过敏原），调味通常使用酱油（大豆过敏原）。",
+    "cooking_method_comparisons": [
+        {{"method": "炒", "calories": 180.0, "fat": 10.0, "description": "标准做法，油量适中"}},
+        {{"method": "水煮", "calories": 130.0, "fat": 5.0, "description": "水煮减少油脂"}},
+        {{"method": "油炸", "calories": 260.0, "fat": 18.0, "description": "油炸热量大幅增加"}}
+    ]
 }}
 
 示例2（番茄炒蛋）：
@@ -278,7 +287,12 @@ class AIService:
     "carbs": 6.3,
     "recommendation": "营养均衡，蛋白质含量较高，适合减脂期食用。",
     "allergens": ["egg"],
-    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
+    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。",
+    "cooking_method_comparisons": [
+        {{"method": "炒", "calories": 150.0, "fat": 8.2, "description": "标准做法"}},
+        {{"method": "蒸蛋", "calories": 80.0, "fat": 5.0, "description": "无需额外油脂"}},
+        {{"method": "煎", "calories": 200.0, "fat": 14.0, "description": "煎制需更多油"}}
+    ]
 }}
 
 示例3（清蒸鲈鱼）：
@@ -289,7 +303,12 @@ class AIService:
     "carbs": 0.5,
     "recommendation": "高蛋白低脂肪，非常适合减脂期食用。",
     "allergens": ["fish", "soy"],
-    "allergen_reasoning": "鲈鱼属于鱼类过敏原，清蒸时通常使用酱油调味（大豆过敏原）。"
+    "allergen_reasoning": "鲈鱼属于鱼类过敏原，清蒸时通常使用酱油调味（大豆过敏原）。",
+    "cooking_method_comparisons": [
+        {{"method": "清蒸", "calories": 105.0, "fat": 3.0, "description": "最健康，保留营养"}},
+        {{"method": "红烧", "calories": 180.0, "fat": 10.0, "description": "酱汁增加热量"}},
+        {{"method": "油炸", "calories": 250.0, "fat": 18.0, "description": "油炸热量最高"}}
+    ]
 }}
 
 现在请分析"{food_name}"："""
@@ -322,7 +341,9 @@ class AIService:
                     "recommendation": data.get("recommendation", "营养数据仅供参考"),
                     # Phase 7: 过敏原推理字段
                     "allergens": data.get("allergens", []),
-                    "allergen_reasoning": data.get("allergen_reasoning", "")
+                    "allergen_reasoning": data.get("allergen_reasoning", ""),
+                    # Phase 50: 烹饪方式热量差异对比
+                    "cooking_method_comparisons": data.get("cooking_method_comparisons", [])
                 }
                 
                 # 验证过敏原代码是否为有效的八大类
@@ -356,7 +377,9 @@ class AIService:
             "recommendation": f"{food_name}的营养数据暂时无法获取，建议适量食用。",
             # Phase 7: 过敏原推理字段（默认值）
             "allergens": [],
-            "allergen_reasoning": ""
+            "allergen_reasoning": "",
+            # Phase 50: 烹饪方式对比（默认值）
+            "cooking_method_comparisons": []
         }
     
     def generate_trip(self, query: str, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None) -> dict:

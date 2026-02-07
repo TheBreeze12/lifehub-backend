@@ -16,8 +16,26 @@ class FoodRequest(BaseModel):
         }
 
 
+class CookingMethodItem(BaseModel):
+    """烹饪方式对比项（Phase 50）"""
+    method: str = Field(..., description="烹饪方式名称（如清蒸、红烧、油炸）")
+    calories: float = Field(..., description="该烹饪方式下的热量（千卡/100g）")
+    fat: float = Field(..., description="该烹饪方式下的脂肪（克/100g）")
+    description: str = Field(..., description="简要说明该烹饪方式的特点")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "method": "清蒸",
+                "calories": 105.0,
+                "fat": 3.0,
+                "description": "保留原味，低油脂，适合减脂期"
+            }
+        }
+
+
 class FoodData(BaseModel):
-    """菜品营养数据（Phase 7增强：含过敏原推理）"""
+    """菜品营养数据（Phase 7增强：含过敏原推理；Phase 50增强：含烹饪方式对比）"""
     name: str = Field(..., description="菜品名称")
     calories: float = Field(..., description="热量（千卡）")
     protein: float = Field(..., description="蛋白质（克）")
@@ -27,6 +45,8 @@ class FoodData(BaseModel):
     # Phase 7: 过敏原推理字段
     allergens: list[str] = Field(default=[], description="AI推理的过敏原代码列表（如peanut, egg等）")
     allergen_reasoning: str = Field(default="", description="过敏原推理说明")
+    # Phase 50: 烹饪方式热量差异对比
+    cooking_method_comparisons: list[CookingMethodItem] | None = Field(default=None, description="不同烹饪方式的热量/脂肪对比列表")
     
     class Config:
         json_schema_extra = {
@@ -38,7 +58,12 @@ class FoodData(BaseModel):
                 "carbs": 6.3,
                 "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量，搭配粗粮主食。",
                 "allergens": ["egg"],
-                "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
+                "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。",
+                "cooking_method_comparisons": [
+                    {"method": "炒", "calories": 150.0, "fat": 8.2, "description": "标准做法，油量适中"},
+                    {"method": "蒸蛋", "calories": 80.0, "fat": 5.0, "description": "无需额外油脂，热量更低"},
+                    {"method": "煎", "calories": 200.0, "fat": 14.0, "description": "煎制需更多油，热量较高"}
+                ]
             }
         }
 

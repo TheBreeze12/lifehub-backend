@@ -143,7 +143,27 @@ Content-Type: application/json
     "carbs": 6.3,
     "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量。",
     "allergens": ["egg"],
-    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
+    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。",
+    "cooking_method_comparisons": [
+      {
+        "method": "炒",
+        "calories": 150.0,
+        "fat": 8.2,
+        "description": "标准做法，油量适中"
+      },
+      {
+        "method": "蒸蛋",
+        "calories": 80.0,
+        "fat": 5.0,
+        "description": "无需额外油脂，热量更低"
+      },
+      {
+        "method": "煎",
+        "calories": 200.0,
+        "fat": 14.0,
+        "description": "煎制需更多油，热量较高"
+      }
+    ]
   }
 }
 ```
@@ -162,6 +182,11 @@ Content-Type: application/json
 | data.recommendation      | string   | AI推荐理由                                        |
 | data.allergens           | string[] | AI推理的过敏原代码列表（Phase 7新增）             |
 | data.allergen_reasoning  | string   | 过敏原推理说明（Phase 7新增）                     |
+| data.cooking_method_comparisons | array | 不同烹饪方式的热量/脂肪对比（Phase 50新增） |
+| data.cooking_method_comparisons[].method | string | 烹饪方式名称 |
+| data.cooking_method_comparisons[].calories | float | 该烹饪方式下的热量（千卡/100g） |
+| data.cooking_method_comparisons[].fat | float | 该烹饪方式下的脂肪（克/100g） |
+| data.cooking_method_comparisons[].description | string | 简要说明该烹饪方式特点 |
 
 **过敏原代码对照**（八大类）:
 | 代码      | 中文名称 | 英文名称   | 说明                           |
