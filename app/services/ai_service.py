@@ -14,6 +14,19 @@ from dashscope import Generation
 
 logger = logging.getLogger(__name__)
 
+# Phase 57: Few-shot Prompt模板服务（延迟导入，避免循环依赖）
+_prompt_template_service = None
+def _get_prompt_tpl_service():
+    """延迟获取Prompt模板服务单例"""
+    global _prompt_template_service
+    if _prompt_template_service is None:
+        try:
+            from app.services.prompt_template_service import get_prompt_template_service
+            _prompt_template_service = get_prompt_template_service()
+        except Exception as e:
+            logger.warning(f"Prompt模板服务初始化失败，将使用硬编码Prompt: {e}")
+    return _prompt_template_service
+
 # 尝试导入地理编码库（可选）
 try:
     from geopy.geocoders import Nominatim
@@ -284,8 +297,33 @@ class AIService:
         
         Phase 7增强：在营养分析中同时进行隐性过敏原AI推理
         Phase 38增强：注入RAG检索的营养知识上下文，提升数据准确性
+        Phase 57增强：使用Few-shot Prompt模板服务构建prompt
         """
-        # Phase 38: RAG上下文注入
+        # Phase 57: 尝试使用模板服务构建prompt
+        tpl_svc = _get_prompt_tpl_service()
+        if tpl_svc is not None:
+            try:
+                rag_section = ""
+                if rag_context:
+                    rag_section = f"\n\n{rag_context}\n\n重要：请优先参考以上《中国食物成分表》数据给出营养分析，确保数据尽量准确。\n"
+                rendered = tpl_svc.render_prompt("food_analysis", variables={
+                    "food_name": food_name,
+                    "rag_context": rag_section,
+                })
+                # 将few-shot示例内联到prompt文本中（豆包AI使用单prompt模式）
+                parts = [rendered["system_prompt"], ""]
+                for i in range(0, len(rendered["few_shot_messages"]), 2):
+                    user_msg = rendered["few_shot_messages"][i]["content"]
+                    asst_msg = rendered["few_shot_messages"][i + 1]["content"] if i + 1 < len(rendered["few_shot_messages"]) else ""
+                    parts.append(f"示例输入：{user_msg}")
+                    parts.append(f"示例输出：{asst_msg}")
+                    parts.append("")
+                parts.append(rendered["user_prompt"])
+                return "\n".join(parts)
+            except Exception as e:
+                logger.warning(f"模板服务渲染food_analysis失败，回退硬编码: {e}")
+
+        # 回退：原始硬编码prompt
         rag_section = ""
         if rag_context:
             rag_section = f"""\n\n{rag_context}\n\n重要：请优先参考以上《中国食物成分表》数据给出营养分析，确保数据尽量准确。\n"""
@@ -296,81 +334,20 @@ class AIService:
 1. 估算每100克的营养数据
 2. 给出减脂人群的饮食建议
 3. 分析该菜品可能包含的八大类过敏原（乳制品、鸡蛋、鱼类、甲壳类、花生、树坚果、小麦、大豆）
-4. 特别注意推理隐性过敏原（如：宫保鸡丁通常含花生；蛋炒饭含鸡蛋；炸酱面含小麦和大豆等）
+4. 特别注意推理隐性过敏原
 5. 只返回JSON，不要其他解释
 6. 如果有参考数据，营养数值应与参考数据接近
-7. 列出该食材/菜品在2-4种不同烹饪方式下的热量和脂肪对比（如清蒸、红烧、油炸、水煮等），帮助用户选择更健康的烹饪方式
+7. 列出该食材/菜品在2-4种不同烹饪方式下的热量和脂肪对比
 
 八大类过敏原代码对照：
-- milk: 乳制品（牛奶、奶酪、黄油、奶油等）
-- egg: 鸡蛋（各种蛋类及其制品）
-- fish: 鱼类（各种鱼类及鱼制品）
-- shellfish: 甲壳类（虾、蟹、贝类等海鲜）
-- peanut: 花生（花生及花生制品）
-- tree_nut: 树坚果（杏仁、核桃、腰果等）
-- wheat: 小麦（面粉、面条、面包等含麸质食品）
-- soy: 大豆（豆腐、豆浆、酱油等豆制品）
+- milk: 乳制品  - egg: 鸡蛋  - fish: 鱼类  - shellfish: 甲壳类
+- peanut: 花生  - tree_nut: 树坚果  - wheat: 小麦  - soy: 大豆
 
 返回格式：
 {{
-    "calories": 热量数值（千卡，浮点数）,
-    "protein": 蛋白质数值（克，浮点数）,
-    "fat": 脂肪数值（克，浮点数）,
-    "carbs": 碳水化合物数值（克，浮点数）,
-    "recommendation": "给减脂人群的建议（50字以内）",
-    "allergens": ["过敏原代码列表，如peanut, egg等"],
-    "allergen_reasoning": "过敏原推理说明（说明为什么这道菜可能含有这些过敏原，100字以内）",
-    "cooking_method_comparisons": [
-        {{"method": "烹饪方式名称", "calories": 热量浮点数, "fat": 脂肪浮点数, "description": "简要说明（20字以内）"}}
-    ]
-}}
-
-示例1（宫保鸡丁）：
-{{
-    "calories": 180.0,
-    "protein": 18.0,
-    "fat": 10.0,
-    "carbs": 8.0,
-    "recommendation": "蛋白质丰富，但花生热量较高，建议适量食用。",
-    "allergens": ["peanut", "soy"],
-    "allergen_reasoning": "宫保鸡丁是经典川菜，主要配料包括花生米（花生过敏原），调味通常使用酱油（大豆过敏原）。",
-    "cooking_method_comparisons": [
-        {{"method": "炒", "calories": 180.0, "fat": 10.0, "description": "标准做法，油量适中"}},
-        {{"method": "水煮", "calories": 130.0, "fat": 5.0, "description": "水煮减少油脂"}},
-        {{"method": "油炸", "calories": 260.0, "fat": 18.0, "description": "油炸热量大幅增加"}}
-    ]
-}}
-
-示例2（番茄炒蛋）：
-{{
-    "calories": 150.0,
-    "protein": 10.5,
-    "fat": 8.2,
-    "carbs": 6.3,
-    "recommendation": "营养均衡，蛋白质含量较高，适合减脂期食用。",
-    "allergens": ["egg"],
-    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。",
-    "cooking_method_comparisons": [
-        {{"method": "炒", "calories": 150.0, "fat": 8.2, "description": "标准做法"}},
-        {{"method": "蒸蛋", "calories": 80.0, "fat": 5.0, "description": "无需额外油脂"}},
-        {{"method": "煎", "calories": 200.0, "fat": 14.0, "description": "煎制需更多油"}}
-    ]
-}}
-
-示例3（清蒸鲈鱼）：
-{{
-    "calories": 105.0,
-    "protein": 19.5,
-    "fat": 3.0,
-    "carbs": 0.5,
-    "recommendation": "高蛋白低脂肪，非常适合减脂期食用。",
-    "allergens": ["fish", "soy"],
-    "allergen_reasoning": "鲈鱼属于鱼类过敏原，清蒸时通常使用酱油调味（大豆过敏原）。",
-    "cooking_method_comparisons": [
-        {{"method": "清蒸", "calories": 105.0, "fat": 3.0, "description": "最健康，保留营养"}},
-        {{"method": "红烧", "calories": 180.0, "fat": 10.0, "description": "酱汁增加热量"}},
-        {{"method": "油炸", "calories": 250.0, "fat": 18.0, "description": "油炸热量最高"}}
-    ]
+    "calories": 热量数值, "protein": 蛋白质数值, "fat": 脂肪数值, "carbs": 碳水数值,
+    "recommendation": "建议", "allergens": ["代码"], "allergen_reasoning": "推理说明",
+    "cooking_method_comparisons": [{{"method": "方式", "calories": 数值, "fat": 数值, "description": "说明"}}]
 }}
 
 现在请分析"{food_name}"："""
@@ -1476,13 +1453,24 @@ class AIService:
         return self._extract_dish_names_with_ark(image_base64)
     
     def _extract_dish_names_with_ark(self, image_base64: str) -> List[str]:
-        """使用豆包AI识别菜单图片"""
+        """使用豆包AI识别菜单图片（Phase 57: 支持模板服务）"""
         _recog_start = time.time()
         try:
             # 构建base64 data URI（尝试使用data URI格式）
             image_data_uri = f"data:image/jpeg;base64,{image_base64}"
             
-            prompt = """请识别这张菜单图片中的所有菜品名称，并以JSON数组格式返回。
+            # Phase 57: 尝试使用模板服务构建prompt
+            prompt = None
+            tpl_svc = _get_prompt_tpl_service()
+            if tpl_svc is not None:
+                try:
+                    rendered = tpl_svc.render_prompt("menu_recognition", variables={})
+                    prompt = rendered["user_prompt"]
+                except Exception as e:
+                    logger.warning(f"模板服务渲染menu_recognition失败，回退硬编码: {e}")
+            
+            if prompt is None:
+                prompt = """请识别这张菜单图片中的所有菜品名称，并以JSON数组格式返回。
 
 要求：
 1. 只返回菜品名称，不要价格、描述等其他信息
@@ -1631,11 +1619,22 @@ class AIService:
         return self._extract_before_meal_features_with_ark(image_base64)
     
     def _extract_before_meal_features_with_ark(self, image_base64: str) -> dict:
-        """使用豆包AI从餐前图片提取特征"""
+        """使用豆包AI从餐前图片提取特征（Phase 57: 支持模板服务）"""
         try:
             image_data_uri = f"data:image/jpeg;base64,{image_base64}"
             
-            prompt = """请分析这张餐前食物图片，识别图片中的所有菜品，并估算每个菜品的份量和营养成分。
+            # Phase 57: 尝试使用模板服务构建prompt
+            prompt = None
+            tpl_svc = _get_prompt_tpl_service()
+            if tpl_svc is not None:
+                try:
+                    rendered = tpl_svc.render_prompt("before_meal_features", variables={})
+                    prompt = rendered["user_prompt"]
+                except Exception as e:
+                    logger.warning(f"模板服务渲染before_meal_features失败，回退硬编码: {e}")
+            
+            if prompt is None:
+                prompt = """请分析这张餐前食物图片，识别图片中的所有菜品，并估算每个菜品的份量和营养成分。
 
 要求：
 1. 识别图片中所有可见的菜品
@@ -1643,59 +1642,7 @@ class AIService:
 3. 根据菜品类型和重量估算热量、蛋白质、脂肪、碳水化合物
 4. 计算所有菜品的总营养成分
 5. 只返回JSON，不要其他解释
-
-返回格式：
-{
-    "dishes": [
-        {
-            "name": "菜品名称",
-            "estimated_weight": 重量数值（克，整数）,
-            "estimated_calories": 热量数值（千卡，浮点数）,
-            "estimated_protein": 蛋白质数值（克，浮点数）,
-            "estimated_fat": 脂肪数值（克，浮点数）,
-            "estimated_carbs": 碳水化合物数值（克，浮点数）
-        }
-    ],
-    "total_estimated_calories": 总热量（千卡，浮点数）,
-    "total_estimated_protein": 总蛋白质（克，浮点数）,
-    "total_estimated_fat": 总脂肪（克，浮点数）,
-    "total_estimated_carbs": 总碳水化合物（克，浮点数）
-}
-
-示例（一份红烧肉+清炒时蔬）：
-{
-    "dishes": [
-        {
-            "name": "红烧肉",
-            "estimated_weight": 200,
-            "estimated_calories": 500.0,
-            "estimated_protein": 25.0,
-            "estimated_fat": 35.0,
-            "estimated_carbs": 10.0
-        },
-        {
-            "name": "清炒时蔬",
-            "estimated_weight": 150,
-            "estimated_calories": 80.0,
-            "estimated_protein": 3.0,
-            "estimated_fat": 5.0,
-            "estimated_carbs": 8.0
-        }
-    ],
-    "total_estimated_calories": 580.0,
-    "total_estimated_protein": 28.0,
-    "total_estimated_fat": 40.0,
-    "total_estimated_carbs": 18.0
-}
-
-如果图片不是食物图片，返回空dishes数组：
-{
-    "dishes": [],
-    "total_estimated_calories": 0,
-    "total_estimated_protein": 0,
-    "total_estimated_fat": 0,
-    "total_estimated_carbs": 0
-}
+6. 如果图片不是食物图片，返回空dishes数组
 
 请分析图片："""
             
@@ -1846,7 +1793,7 @@ class AIService:
         after_image_base64: str,
         before_features: dict
     ) -> dict:
-        """使用豆包AI对比餐前餐后图片"""
+        """使用豆包AI对比餐前餐后图片（Phase 57: 支持模板服务）"""
         try:
             before_data_uri = f"data:image/jpeg;base64,{before_image_base64}"
             after_data_uri = f"data:image/jpeg;base64,{after_image_base64}"
@@ -1862,7 +1809,20 @@ class AIService:
                     dishes_info.append(f"- {name}（估算重量：{weight}g，热量：{calories}kcal）")
                 before_dishes_text = "\n".join(dishes_info)
             
-            prompt = f"""请对比这两张图片（餐前和餐后），分析用户吃掉了多少食物，剩余了多少。
+            # Phase 57: 尝试使用模板服务构建prompt
+            prompt = None
+            tpl_svc = _get_prompt_tpl_service()
+            if tpl_svc is not None:
+                try:
+                    rendered = tpl_svc.render_prompt("meal_comparison", variables={
+                        "before_dishes_text": before_dishes_text if before_dishes_text else "未识别到具体菜品",
+                    })
+                    prompt = rendered["user_prompt"]
+                except Exception as e:
+                    logger.warning(f"模板服务渲染meal_comparison失败，回退硬编码: {e}")
+            
+            if prompt is None:
+                prompt = f"""请对比这两张图片（餐前和餐后），分析用户吃掉了多少食物，剩余了多少。
 
 餐前识别到的菜品信息：
 {before_dishes_text if before_dishes_text else "未识别到具体菜品"}
@@ -1873,39 +1833,6 @@ class AIService:
 3. 计算整体剩余比例
 4. 给出简短的对比分析说明
 5. 只返回JSON，不要其他解释
-
-返回格式：
-{{
-    "dishes": [
-        {{
-            "name": "菜品名称",
-            "remaining_ratio": 剩余比例（0-1的浮点数，0表示全部吃完，1表示完全没动）,
-            "remaining_weight": 估算剩余重量（克，整数）
-        }}
-    ],
-    "overall_remaining_ratio": 整体剩余比例（0-1的浮点数）,
-    "comparison_analysis": "对比分析说明（50字以内，描述用户大约吃掉了多少）"
-}}
-
-示例（吃掉了大部分红烧肉，吃完了所有蔬菜）：
-{{
-    "dishes": [
-        {{"name": "红烧肉", "remaining_ratio": 0.25, "remaining_weight": 50}},
-        {{"name": "清炒时蔬", "remaining_ratio": 0.0, "remaining_weight": 0}}
-    ],
-    "overall_remaining_ratio": 0.15,
-    "comparison_analysis": "您吃掉了约85%的食物，红烧肉剩余约1/4，蔬菜全部吃完。"
-}}
-
-示例（几乎没吃）：
-{{
-    "dishes": [
-        {{"name": "红烧肉", "remaining_ratio": 0.9, "remaining_weight": 180}},
-        {{"name": "清炒时蔬", "remaining_ratio": 0.8, "remaining_weight": 120}}
-    ],
-    "overall_remaining_ratio": 0.85,
-    "comparison_analysis": "您只吃了约15%的食物，大部分食物还剩余在盘中。"
-}}
 
 请分析图片："""
             
