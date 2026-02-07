@@ -133,7 +133,10 @@ class AIService:
     
     def analyze_food_nutrition(self, food_name: str) -> dict:
         """
-        分析菜品营养成分（使用豆包AI）
+        分析菜品营养成分（使用豆包AI + RAG检索增强）
+        
+        Phase 38增强：先通过RAG检索《中国食物成分表》获取参考数据，
+        将检索结果作为上下文注入LLM Prompt，减少幻觉，提升准确性。
         
         Args:
             food_name: 菜品名称
@@ -147,11 +150,23 @@ class AIService:
         if not self.ark_client:
             raise ValueError("豆包AI未初始化，请检查ARK_API_KEY环境变量")
         
-        return self._analyze_food_nutrition_with_ark(food_name)
+        # Phase 38: RAG检索营养知识上下文
+        rag_context = ""
+        try:
+            from app.services.nutrition_rag_service import get_nutrition_rag_service
+            rag_service = get_nutrition_rag_service()
+            rag_context = rag_service.get_nutrition_context(food_name, top_k=3)
+            if rag_context:
+                print(f"✓ RAG检索到营养知识上下文: {food_name}")
+        except Exception as e:
+            print(f"警告: RAG检索失败，将仅使用LLM分析: {e}")
+            rag_context = ""
+        
+        return self._analyze_food_nutrition_with_ark(food_name, rag_context=rag_context)
     
-    def _analyze_food_nutrition_with_ark(self, food_name: str) -> dict:
-        """使用豆包AI分析菜品营养"""
-        prompt = self._build_nutrition_prompt(food_name)
+    def _analyze_food_nutrition_with_ark(self, food_name: str, rag_context: str = "") -> dict:
+        """使用豆包AI分析菜品营养（Phase 38: 支持RAG上下文注入）"""
+        prompt = self._build_nutrition_prompt(food_name, rag_context=rag_context)
         
         try:
             response = self.ark_client.responses.create(
@@ -201,20 +216,27 @@ class AIService:
             traceback.print_exc()
             raise
     
-    def _build_nutrition_prompt(self, food_name: str) -> str:
+    def _build_nutrition_prompt(self, food_name: str, rag_context: str = "") -> str:
         """
-        构建营养分析Prompt（含过敏原推理）
+        构建营养分析Prompt（含过敏原推理 + RAG上下文）
         
         Phase 7增强：在营养分析中同时进行隐性过敏原AI推理
+        Phase 38增强：注入RAG检索的营养知识上下文，提升数据准确性
         """
+        # Phase 38: RAG上下文注入
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""\n\n{rag_context}\n\n重要：请优先参考以上《中国食物成分表》数据给出营养分析，确保数据尽量准确。\n"""
+        
         prompt = f"""请分析菜品"{food_name}"的营养成分和可能的过敏原，并以JSON格式返回。
-
+{rag_section}
 要求：
 1. 估算每100克的营养数据
 2. 给出减脂人群的饮食建议
 3. 分析该菜品可能包含的八大类过敏原（乳制品、鸡蛋、鱼类、甲壳类、花生、树坚果、小麦、大豆）
 4. 特别注意推理隐性过敏原（如：宫保鸡丁通常含花生；蛋炒饭含鸡蛋；炸酱面含小麦和大豆等）
 5. 只返回JSON，不要其他解释
+6. 如果有参考数据，营养数值应与参考数据接近
 
 八大类过敏原代码对照：
 - milk: 乳制品（牛奶、奶酪、黄油、奶油等）
