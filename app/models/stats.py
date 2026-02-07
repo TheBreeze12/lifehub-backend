@@ -3,9 +3,10 @@
 Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
 Phase 26: 饮食-运动数据联动（新增字段）
+Phase 51: 运动频率分析
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 
 # ============== 膳食指南常量 ==============
@@ -466,6 +467,150 @@ class GoalProgressResponse(BaseModel):
                     "dimensions": [],
                     "suggestions": ["继续保持"],
                     "streak_days": 5
+                }
+            }
+        }
+
+
+# ============== Phase 51: 运动频率分析模型 ==============
+
+# 运动类型中文标签映射
+EXERCISE_TYPE_LABELS = {
+    "walking": "步行",
+    "running": "跑步",
+    "cycling": "骑行",
+    "jogging": "慢跑",
+    "hiking": "徒步",
+    "swimming": "游泳",
+    "gym": "健身房",
+    "indoor": "室内运动",
+    "outdoor": "户外运动",
+}
+
+
+class DailyExerciseFrequency(BaseModel):
+    """单日运动频率数据"""
+    date: str = Field(..., description="日期（YYYY-MM-DD）")
+    count: int = Field(0, description="当日运动次数")
+    total_duration: int = Field(0, description="当日总运动时长（分钟）")
+    total_calories: float = Field(0.0, description="当日总消耗热量（kcal）")
+    exercise_types: List[str] = Field(default_factory=list, description="当日运动类型列表")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "date": "2026-02-07",
+                "count": 2,
+                "total_duration": 65,
+                "total_calories": 350.0,
+                "exercise_types": ["walking", "running"]
+            }
+        }
+
+
+class ExerciseTypeDistribution(BaseModel):
+    """运动类型分布"""
+    exercise_type: str = Field(..., description="运动类型代码")
+    label: str = Field(..., description="运动类型中文标签")
+    count: int = Field(0, description="该类型运动次数")
+    total_duration: int = Field(0, description="该类型总时长（分钟）")
+    total_calories: float = Field(0.0, description="该类型总消耗（kcal）")
+    percentage: float = Field(0.0, description="次数占比（%）")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "exercise_type": "walking",
+                "label": "步行",
+                "count": 5,
+                "total_duration": 150,
+                "total_calories": 600.0,
+                "percentage": 35.7
+            }
+        }
+
+
+class ExerciseFrequencyData(BaseModel):
+    """运动频率分析数据"""
+    user_id: int = Field(..., description="用户ID")
+    period: str = Field(..., description="统计周期：week/month")
+    period_label: str = Field(..., description="统计周期中文标签")
+    start_date: str = Field(..., description="统计起始日期（YYYY-MM-DD）")
+    end_date: str = Field(..., description="统计结束日期（YYYY-MM-DD）")
+    total_days: int = Field(0, description="统计总天数")
+    active_days: int = Field(0, description="有运动记录的天数")
+    total_exercise_count: int = Field(0, description="总运动次数")
+    total_duration: int = Field(0, description="总运动时长（分钟）")
+    total_calories: float = Field(0.0, description="总消耗热量（kcal）")
+    avg_frequency: float = Field(0.0, description="平均每周运动次数")
+    avg_duration_per_session: float = Field(0.0, description="平均每次运动时长（分钟）")
+    avg_calories_per_session: float = Field(0.0, description="平均每次消耗热量（kcal）")
+    daily_data: List[DailyExerciseFrequency] = Field(
+        default_factory=list, description="每日运动频率明细"
+    )
+    type_distribution: List[ExerciseTypeDistribution] = Field(
+        default_factory=list, description="运动类型分布"
+    )
+    frequency_rating: str = Field(
+        "insufficient", description="运动频率评级：excellent/good/fair/insufficient"
+    )
+    frequency_suggestion: str = Field(
+        "", description="运动频率建议"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": 1,
+                "period": "week",
+                "period_label": "最近一周",
+                "start_date": "2026-02-01",
+                "end_date": "2026-02-07",
+                "total_days": 7,
+                "active_days": 4,
+                "total_exercise_count": 6,
+                "total_duration": 210,
+                "total_calories": 1200.0,
+                "avg_frequency": 6.0,
+                "avg_duration_per_session": 35.0,
+                "avg_calories_per_session": 200.0,
+                "daily_data": [],
+                "type_distribution": [],
+                "frequency_rating": "good",
+                "frequency_suggestion": "运动频率良好，保持每周4-5天运动习惯"
+            }
+        }
+
+
+class ExerciseFrequencyResponse(BaseModel):
+    """运动频率分析响应"""
+    code: int = Field(200, description="状态码，200表示成功")
+    message: str = Field("获取成功", description="消息")
+    data: ExerciseFrequencyData = Field(..., description="运动频率分析数据")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "获取成功",
+                "data": {
+                    "user_id": 1,
+                    "period": "week",
+                    "period_label": "最近一周",
+                    "start_date": "2026-02-01",
+                    "end_date": "2026-02-07",
+                    "total_days": 7,
+                    "active_days": 4,
+                    "total_exercise_count": 6,
+                    "total_duration": 210,
+                    "total_calories": 1200.0,
+                    "avg_frequency": 6.0,
+                    "avg_duration_per_session": 35.0,
+                    "avg_calories_per_session": 200.0,
+                    "daily_data": [],
+                    "type_distribution": [],
+                    "frequency_rating": "good",
+                    "frequency_suggestion": "运动频率良好"
                 }
             }
         }

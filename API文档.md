@@ -52,6 +52,7 @@
 | **运动记录** | `/api/exercise/record/{record_id}` | DELETE | 删除运动记录   |
 | **运动记录** | `/api/exercise/health`   | GET  | 运动记录服务健康检查 |
 | **统计** | `/api/stats/goal-progress`   | GET  | 健康目标达成率（Phase 36） |
+| **统计** | `/api/stats/exercise-frequency` | GET | 运动频率分析（Phase 51） |
 
 ---
 
@@ -3106,7 +3107,130 @@ DELETE http://localhost:8000/api/exercise/record/1?userId=1
 
 ---
 
+### 21. 运动频率分析 ⭐（Phase 51）
+
+**接口地址**: `GET /api/stats/exercise-frequency`
+
+**接口描述**: 统计指定周期内的运动频率、类型分布，并给出评级和建议。支持周/月两种周期。
+
+**请求参数**:
+| 参数名  | 类型   | 必填 | 说明                                    |
+| ------- | ------ | ---- | --------------------------------------- |
+| user_id | int    | 是   | 用户ID                                    |
+| period  | string | 否   | 统计周期：week=最近一周（默认），month=最近30天 |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/exercise-frequency?user_id=1&period=week
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "user_id": 1,
+    "period": "week",
+    "period_label": "最近一周",
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-07",
+    "total_days": 7,
+    "active_days": 4,
+    "total_exercise_count": 6,
+    "total_duration": 210,
+    "total_calories": 1200.0,
+    "avg_frequency": 6.0,
+    "avg_duration_per_session": 35.0,
+    "avg_calories_per_session": 200.0,
+    "daily_data": [
+      {
+        "date": "2026-02-01",
+        "count": 2,
+        "total_duration": 60,
+        "total_calories": 400.0,
+        "exercise_types": ["walking", "running"]
+      },
+      {
+        "date": "2026-02-02",
+        "count": 0,
+        "total_duration": 0,
+        "total_calories": 0.0,
+        "exercise_types": []
+      }
+    ],
+    "type_distribution": [
+      {
+        "exercise_type": "walking",
+        "label": "步行",
+        "count": 3,
+        "total_duration": 90,
+        "total_calories": 400.0,
+        "percentage": 50.0
+      },
+      {
+        "exercise_type": "running",
+        "label": "跑步",
+        "count": 3,
+        "total_duration": 120,
+        "total_calories": 800.0,
+        "percentage": 50.0
+      }
+    ],
+    "frequency_rating": "good",
+    "frequency_suggestion": "运动频率良好，建议逐步增加到每周5天"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                    | 类型   | 说明                                      |
+| --------------------------------------- | ------ | ----------------------------------------- |
+| data.user_id                            | int    | 用户ID                                      |
+| data.period                             | string | 统计周期（week/month）                   |
+| data.period_label                       | string | 统计周期中文标签                       |
+| data.start_date                         | string | 统计起始日期                             |
+| data.end_date                           | string | 统计结束日期                             |
+| data.total_days                         | int    | 统计总天数                               |
+| data.active_days                        | int    | 有运动记录的天数                       |
+| data.total_exercise_count               | int    | 总运动次数                               |
+| data.total_duration                     | int    | 总运动时长（分钟）                       |
+| data.total_calories                     | float  | 总消耗热量（kcal）                       |
+| data.avg_frequency                      | float  | 平均每周运动次数                       |
+| data.avg_duration_per_session           | float  | 平均每次运动时长（分钟）               |
+| data.avg_calories_per_session           | float  | 平均每次消耗热量（kcal）               |
+| data.daily_data                         | array  | 每日运动频率明细                       |
+| data.daily_data[].date                  | string | 日期                                      |
+| data.daily_data[].count                 | int    | 当日运动次数                           |
+| data.daily_data[].total_duration        | int    | 当日总时长（分钟）                       |
+| data.daily_data[].total_calories        | float  | 当日总消耗（kcal）                       |
+| data.daily_data[].exercise_types        | array  | 当日运动类型列表                       |
+| data.type_distribution                  | array  | 运动类型分布                             |
+| data.type_distribution[].exercise_type  | string | 运动类型代码                           |
+| data.type_distribution[].label          | string | 运动类型中文标签                       |
+| data.type_distribution[].count          | int    | 该类型运动次数                         |
+| data.type_distribution[].total_duration | int    | 该类型总时长（分钟）                     |
+| data.type_distribution[].total_calories | float  | 该类型总消耗（kcal）                     |
+| data.type_distribution[].percentage     | float  | 次数占比（%）                            |
+| data.frequency_rating                   | string | 评级（excellent/good/fair/insufficient） |
+| data.frequency_suggestion               | string | 运动频率建议                             |
+
+**错误响应**:
+- period参数错误（HTTP 400）:
+```json
+{
+  "detail": "period参数错误，仅支持 week 或 month，收到: daily"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.9.0 (2026-02-07)
+- ✅ 添加运动频率分析接口 `GET /api/stats/exercise-frequency`（Phase 51）
+- ✅ 支持周/月两种统计周期
+- ✅ 返回每日明细、类型分布、频率评级和个性化建议
 
 ### v1.8.0 (2026-02-06)
 - ✅ 添加健康目标达成率接口 `GET /api/stats/goal-progress`（Phase 36）

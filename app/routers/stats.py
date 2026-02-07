@@ -4,12 +4,14 @@ Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
 Phase 26: 饮食-运动数据联动
 Phase 36: 健康目标达成率
+Phase 51: 运动频率分析
 
 提供每日/每周热量统计接口：
 - GET /api/stats/calories/daily - 每日热量统计（含运动记录联动、热量缺口、达成率）
 - GET /api/stats/calories/weekly - 每周热量统计
 - GET /api/stats/nutrients/daily - 每日营养素统计（Phase 16）
 - GET /api/stats/goal-progress - 健康目标达成率（Phase 36）
+- GET /api/stats/exercise-frequency - 运动频率分析（Phase 51）
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
@@ -24,6 +26,8 @@ from app.models.stats import (
     DailyNutrientStats,
     GoalProgressResponse,
     GoalProgressData,
+    ExerciseFrequencyResponse,
+    ExerciseFrequencyData,
 )
 from app.db_models.user import User
 
@@ -377,4 +381,104 @@ async def get_goal_progress(
         code=200,
         message="获取成功",
         data=progress
+    )
+
+
+# ============== Phase 51: 运动频率分析接口 ==============
+
+@router.get("/exercise-frequency", response_model=ExerciseFrequencyResponse)
+async def get_exercise_frequency(
+    user_id: int = Query(..., alias="user_id", description="用户ID", gt=0),
+    period: str = Query("week", description="统计周期：week=最近一周，month=最近一个月"),
+    db: Session = Depends(get_db)
+):
+    """
+    获取运动频率分析（Phase 51）
+    
+    统计指定周期内的运动频率、类型分布，并给出评级和建议。
+    
+    返回数据包含：
+    - **total_days**: 统计总天数
+    - **active_days**: 有运动记录的天数
+    - **total_exercise_count**: 总运动次数
+    - **total_duration**: 总运动时长（分钟）
+    - **total_calories**: 总消耗热量（kcal）
+    - **avg_frequency**: 平均每周运动次数
+    - **avg_duration_per_session**: 平均每次运动时长（分钟）
+    - **avg_calories_per_session**: 平均每次消耗热量（kcal）
+    - **daily_data**: 每日运动频率明细
+    - **type_distribution**: 运动类型分布
+    - **frequency_rating**: 运动频率评级（excellent/good/fair/insufficient）
+    - **frequency_suggestion**: 运动频率建议
+    
+    Args:
+        user_id: 用户ID
+        period: 统计周期（week/month，默认week）
+        
+    Returns:
+        ExerciseFrequencyResponse: 运动频率分析响应
+    """
+    # 校验 period 参数
+    if period not in ("week", "month"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"period参数错误，仅支持 week 或 month，收到: {period}"
+        )
+    
+    # 验证用户是否存在
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        # 返回空数据而非404
+        from datetime import timedelta
+        from datetime import date as date_cls
+        today = date_cls.today()
+        if period == "month":
+            start = today - timedelta(days=29)
+            total_days = 30
+            period_label = "最近一个月"
+        else:
+            start = today - timedelta(days=6)
+            total_days = 7
+            period_label = "最近一周"
+        
+        from app.models.stats import DailyExerciseFrequency
+        daily_data = [
+            DailyExerciseFrequency(
+                date=(start + timedelta(days=i)).isoformat(),
+                count=0, total_duration=0, total_calories=0.0, exercise_types=[]
+            )
+            for i in range(total_days)
+        ]
+        empty_data = ExerciseFrequencyData(
+            user_id=user_id,
+            period=period,
+            period_label=period_label,
+            start_date=start.isoformat(),
+            end_date=today.isoformat(),
+            total_days=total_days,
+            active_days=0,
+            total_exercise_count=0,
+            total_duration=0,
+            total_calories=0.0,
+            avg_frequency=0.0,
+            avg_duration_per_session=0.0,
+            avg_calories_per_session=0.0,
+            daily_data=daily_data,
+            type_distribution=[],
+            frequency_rating="insufficient",
+            frequency_suggestion="暂无运动数据，建议开始规律运动"
+        )
+        return ExerciseFrequencyResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_data
+        )
+    
+    # 获取运动频率数据
+    frequency_data = stats_service.get_exercise_frequency(db, user_id, period)
+    
+    return ExerciseFrequencyResponse(
+        code=200,
+        message="获取成功",
+        data=frequency_data
     )

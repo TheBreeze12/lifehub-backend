@@ -4,6 +4,7 @@ Phase 15: 热量收支统计
 Phase 16: 营养素摄入统计
 Phase 26: 饮食-运动数据联动
 Phase 36: 健康目标达成率
+Phase 51: 运动频率分析
 
 提供每日/每周热量统计功能：
 - 统计饮食记录的摄入热量
@@ -14,6 +15,7 @@ Phase 36: 健康目标达成率
 - 统计营养素（蛋白质、脂肪、碳水）摄入比例
 - 与膳食指南建议值对比
 - 根据用户健康目标计算多维度达成率（Phase 36新增）
+- 统计运动频率、类型分布、评级与建议（Phase 51新增）
 """
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
@@ -29,7 +31,9 @@ from app.models.stats import (
     DailyCalorieStats, WeeklyCalorieStats, DailyBreakdown,
     DailyNutrientStats, NutrientComparison, GuidelinesComparison,
     DIETARY_GUIDELINES, PROTEIN_KCAL_PER_GRAM, FAT_KCAL_PER_GRAM, CARBS_KCAL_PER_GRAM,
-    GoalProgressData, GoalDimension, HEALTH_GOAL_LABELS
+    GoalProgressData, GoalDimension, HEALTH_GOAL_LABELS,
+    ExerciseFrequencyData, DailyExerciseFrequency, ExerciseTypeDistribution,
+    EXERCISE_TYPE_LABELS
 )
 
 
@@ -989,6 +993,181 @@ class StatsService:
             dimensions=dimensions,
             suggestions=suggestions,
             streak_days=streak
+        )
+
+
+    # ============== Phase 51: 运动频率分析方法 ==============
+
+    @staticmethod
+    def _rate_frequency(active_days: int, total_days: int, period: str) -> tuple:
+        """
+        根据运动频率评级并给出建议。
+        WHO建议：成人每周至少150分钟中等强度或75分钟高强度有氧运动，
+        折算约每周至少3-5天有运动记录。
+
+        Returns:
+            (rating, suggestion)
+        """
+        if total_days == 0:
+            return "insufficient", "暂无运动数据，建议开始规律运动"
+
+        if period == "week":
+            if active_days >= 5:
+                return "excellent", "运动频率优秀，保持每周5天以上运动习惯！"
+            elif active_days >= 3:
+                return "good", "运动频率良好，建议逐步增加到每周5天"
+            elif active_days >= 1:
+                return "fair", "运动频率偏低，建议每周至少运动3天"
+            else:
+                return "insufficient", "本周暂无运动记录，建议尽快开始运动"
+        else:  # month
+            weekly_avg = active_days / (total_days / 7.0)
+            if weekly_avg >= 5:
+                return "excellent", f"月均每周运动{weekly_avg:.1f}天，频率优秀！"
+            elif weekly_avg >= 3:
+                return "good", f"月均每周运动{weekly_avg:.1f}天，频率良好"
+            elif weekly_avg >= 1:
+                return "fair", f"月均每周运动{weekly_avg:.1f}天，建议增加运动频率"
+            else:
+                return "insufficient", "本月运动频率不足，建议每周至少运动3天"
+
+    def get_exercise_frequency(
+        self,
+        db: Session,
+        user_id: int,
+        period: str = "week"
+    ) -> ExerciseFrequencyData:
+        """
+        获取运动频率分析数据（Phase 51）
+
+        统计指定周期内的运动频率、类型分布，并给出评级和建议。
+
+        Args:
+            db: 数据库会话
+            user_id: 用户ID
+            period: 统计周期，week=最近7天，month=最近30天
+
+        Returns:
+            ExerciseFrequencyData: 运动频率分析数据
+        """
+        today = date.today()
+
+        if period == "month":
+            start_date = today - timedelta(days=29)
+            total_days = 30
+            period_label = "最近一个月"
+        else:
+            start_date = today - timedelta(days=6)
+            total_days = 7
+            period_label = "最近一周"
+
+        # 查询周期内所有运动记录
+        records = db.query(ExerciseRecord).filter(
+            and_(
+                ExerciseRecord.user_id == user_id,
+                ExerciseRecord.exercise_date >= start_date,
+                ExerciseRecord.exercise_date <= today
+            )
+        ).order_by(ExerciseRecord.exercise_date).all()
+
+        # 按日期聚合
+        daily_map: dict = {}
+        type_map: dict = {}
+
+        for rec in records:
+            d_str = rec.exercise_date.isoformat() if hasattr(rec.exercise_date, 'isoformat') else str(rec.exercise_date)
+            cal = rec.actual_calories or 0.0
+            dur = rec.actual_duration or 0
+            ex_type = rec.exercise_type or "outdoor"
+
+            # 每日聚合
+            if d_str not in daily_map:
+                daily_map[d_str] = {
+                    "count": 0, "total_duration": 0,
+                    "total_calories": 0.0, "exercise_types": set()
+                }
+            daily_map[d_str]["count"] += 1
+            daily_map[d_str]["total_duration"] += dur
+            daily_map[d_str]["total_calories"] += cal
+            daily_map[d_str]["exercise_types"].add(ex_type)
+
+            # 类型聚合
+            if ex_type not in type_map:
+                type_map[ex_type] = {"count": 0, "total_duration": 0, "total_calories": 0.0}
+            type_map[ex_type]["count"] += 1
+            type_map[ex_type]["total_duration"] += dur
+            type_map[ex_type]["total_calories"] += cal
+
+        # 构建每日明细（覆盖整个周期，无记录的天也要包含）
+        daily_data = []
+        for i in range(total_days):
+            d = start_date + timedelta(days=i)
+            d_str = d.isoformat()
+            if d_str in daily_map:
+                info = daily_map[d_str]
+                daily_data.append(DailyExerciseFrequency(
+                    date=d_str,
+                    count=info["count"],
+                    total_duration=info["total_duration"],
+                    total_calories=round(info["total_calories"], 2),
+                    exercise_types=sorted(list(info["exercise_types"]))
+                ))
+            else:
+                daily_data.append(DailyExerciseFrequency(
+                    date=d_str,
+                    count=0,
+                    total_duration=0,
+                    total_calories=0.0,
+                    exercise_types=[]
+                ))
+
+        # 构建类型分布
+        total_count = sum(v["count"] for v in type_map.values())
+        type_distribution = []
+        for ex_type, info in sorted(type_map.items(), key=lambda x: x[1]["count"], reverse=True):
+            pct = (info["count"] / total_count * 100) if total_count > 0 else 0.0
+            type_distribution.append(ExerciseTypeDistribution(
+                exercise_type=ex_type,
+                label=EXERCISE_TYPE_LABELS.get(ex_type, ex_type),
+                count=info["count"],
+                total_duration=info["total_duration"],
+                total_calories=round(info["total_calories"], 2),
+                percentage=round(pct, 1)
+            ))
+
+        # 汇总统计
+        active_days = len(daily_map)
+        total_exercise_count = total_count
+        total_duration = sum(v["total_duration"] for v in daily_map.values())
+        total_calories = sum(v["total_calories"] for v in daily_map.values())
+
+        # 平均值
+        weeks_in_period = total_days / 7.0
+        avg_frequency = round(total_exercise_count / weeks_in_period, 1) if weeks_in_period > 0 else 0.0
+        avg_duration = round(total_duration / total_exercise_count, 1) if total_exercise_count > 0 else 0.0
+        avg_calories = round(total_calories / total_exercise_count, 1) if total_exercise_count > 0 else 0.0
+
+        # 评级与建议
+        rating, suggestion = self._rate_frequency(active_days, total_days, period)
+
+        return ExerciseFrequencyData(
+            user_id=user_id,
+            period=period,
+            period_label=period_label,
+            start_date=start_date.isoformat(),
+            end_date=today.isoformat(),
+            total_days=total_days,
+            active_days=active_days,
+            total_exercise_count=total_exercise_count,
+            total_duration=total_duration,
+            total_calories=round(total_calories, 2),
+            avg_frequency=avg_frequency,
+            avg_duration_per_session=avg_duration,
+            avg_calories_per_session=avg_calories,
+            daily_data=daily_data,
+            type_distribution=type_distribution,
+            frequency_rating=rating,
+            frequency_suggestion=suggestion
         )
 
 
