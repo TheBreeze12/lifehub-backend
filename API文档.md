@@ -3372,9 +3372,16 @@ DELETE http://localhost:8000/api/user/data?userId=123
 - ✅ 实现用户偏好设置
 - ✅ 集成天气查询服务（Open-Meteo）
 
+### v1.4.7 (2026-02-07) Phase 57
+- ✅ 实现Few-shot Prompt模板管理服务 `app/services/prompt_template_service.py`
+- ✅ 所有AI调用方法（food_analysis/exercise_intent/trip_generation/menu_recognition/before_meal_features/meal_comparison）统一接入模板服务
+- ✅ 实现运动偏好意图理解增强：槽位提取支持运动类型/时长(duration_minutes)/强度(intensity)
+- ✅ 支持模板版本管理、Few-shot示例增删、动态变量替换、JSON持久化
+
 ### v1.4.6 (2026-02-07) Phase 56
 - ✅ 添加AI调用日志接口 `GET /api/user/ai-logs`
 - ✅ 添加AI调用统计接口 `GET /api/user/ai-logs/stats`
-- ✅ 自动记录每次AI调用到ai_call_log表
+- ✅ 自动记录所有6种AI调用到ai_call_log表（含before_meal_features和meal_comparison）
 - ✅ 支持按调用类型过滤、分页查询
+- ✅ 前端AiCallLogPage展示调用时间、类型、数据摘要、统计信息
 

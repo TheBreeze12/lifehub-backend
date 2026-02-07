@@ -474,7 +474,9 @@ class AIService:
         return None
     
     def _extract_exercise_intent(self, query: str, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None) -> dict:
-        """提取运动意图（卡路里目标、运动类型、时间等）"""
+        """提取运动意图（卡路里目标、运动类型、时长、强度等）
+        Phase 57增强：支持槽位提取 - 运动类型/时长/强度
+        """
         calories_info = ""
         if calories_intake > 0:
             calories_info = f"\n用户今日已摄入卡路里：{calories_intake:.1f} kcal"
@@ -583,7 +585,15 @@ class AIService:
    - 如果查询中提到"一周"、"7天"等，days应该是7
    - 如果未指定，days通常是1
 5. calories_target: 目标消耗卡路里（整数，单位：kcal，如果未指定则根据已摄入卡路里推算）
-6. exercise_type: 运动类型偏好（如"散步"、"跑步"、"骑行"等，如果未指定则为null）
+6. exercise_type: 运动类型偏好（如"散步"、"跑步"、"骑行"、"游泳"等，如果未指定则为null）
+7. duration_minutes: 期望运动时长（整数，分钟，如"30分钟"→30，未指定则为null）
+8. intensity: 运动强度（"低"/"中"/"高"，根据运动类型和用户描述推断，未指定则为null）
+
+强度推断规则：
+- 散步/太极 → 低强度
+- 慢跑/骑行/瑜伽 → 中强度
+- 跑步/游泳/HIIT → 高强度
+- 用户明确说"中等强度"、"高强度"等，直接使用
 
 只返回JSON，不要其他解释。
 
@@ -594,6 +604,30 @@ class AIService:
 - destination必须是具体地点名称，不能包含"附近"、"附近XX"等模糊词汇
 """
         
+        # Phase 57: 尝试使用模板服务构建意图提取prompt
+        tpl_svc = _get_prompt_tpl_service()
+        if tpl_svc is not None:
+            try:
+                rendered = tpl_svc.render_prompt("exercise_intent", variables={
+                    "query": query,
+                    "calories_info": calories_info,
+                    "explicit_place_hint": explicit_place_hint,
+                    "location_hint": location_hint,
+                    "today_date": today_str,
+                })
+                # 将few-shot示例内联到prompt文本中（qwen-turbo使用单prompt模式）
+                parts = [rendered["system_prompt"], ""]
+                for i in range(0, len(rendered["few_shot_messages"]), 2):
+                    user_msg = rendered["few_shot_messages"][i]["content"]
+                    asst_msg = rendered["few_shot_messages"][i + 1]["content"] if i + 1 < len(rendered["few_shot_messages"]) else ""
+                    parts.append(f"示例输入：{user_msg}")
+                    parts.append(f"示例输出：{asst_msg}")
+                    parts.append("")
+                parts.append(rendered["user_prompt"])
+                prompt = "\n".join(parts)
+            except Exception as e:
+                logger.warning(f"模板服务渲染exercise_intent失败，回退硬编码: {e}")
+
         _intent_start = time.time()
         try:
             response = Generation.call(
@@ -678,7 +712,9 @@ class AIService:
                 "endDate": today.strftime("%Y-%m-%d"),
                 "days": 1,
                 "calories_target": calories_target,
-                "exercise_type": None
+                "exercise_type": None,
+                "duration_minutes": None,
+                "intensity": None
             }
     
     def _generate_exercise_plan(self, intent: dict, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None, query: str = "") -> dict:
@@ -884,6 +920,34 @@ class AIService:
     ]
 }}"""
         
+        # Phase 57: 尝试使用模板服务构建运动计划prompt
+        tpl_svc = _get_prompt_tpl_service()
+        if tpl_svc is not None:
+            try:
+                rendered = tpl_svc.render_prompt("trip_generation", variables={
+                    "destination": destination,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "days": str(days),
+                    "calories_target": str(calories_target),
+                    "exercise_type_text": exercise_type_text,
+                    "preference_text": preference_text,
+                    "calories_context": calories_context,
+                    "location_context": location_context,
+                })
+                # 将few-shot示例内联到prompt文本中（qwen-turbo使用单prompt模式）
+                parts = [rendered["system_prompt"], ""]
+                for i in range(0, len(rendered["few_shot_messages"]), 2):
+                    user_msg = rendered["few_shot_messages"][i]["content"]
+                    asst_msg = rendered["few_shot_messages"][i + 1]["content"] if i + 1 < len(rendered["few_shot_messages"]) else ""
+                    parts.append(f"示例输入：{user_msg}")
+                    parts.append(f"示例输出：{asst_msg}")
+                    parts.append("")
+                parts.append(rendered["user_prompt"])
+                prompt = "\n".join(parts)
+            except Exception as e:
+                logger.warning(f"模板服务渲染trip_generation失败，回退硬编码: {e}")
+
         _plan_start = time.time()
         try:
             response = Generation.call(
@@ -1620,6 +1684,7 @@ class AIService:
     
     def _extract_before_meal_features_with_ark(self, image_base64: str) -> dict:
         """使用豆包AI从餐前图片提取特征（Phase 57: 支持模板服务）"""
+        _bf_start = time.time()
         try:
             image_data_uri = f"data:image/jpeg;base64,{image_base64}"
             
@@ -1680,11 +1745,32 @@ class AIService:
                                     break
             
             if content:
-                return self._parse_before_meal_features(content)
+                result = self._parse_before_meal_features(content)
+                # Phase 56: 记录成功的AI调用
+                _bf_latency = int((time.time() - _bf_start) * 1000)
+                self._log_ai_call(
+                    call_type="food_analysis",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary="餐前图片特征提取",
+                    success=True,
+                    latency_ms=_bf_latency,
+                    output_summary=f"dishes={len(result.get('dishes', []))}, calories={result.get('total_estimated_calories')}",
+                )
+                return result
             else:
                 raise Exception("豆包AI返回空响应")
                 
         except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _bf_latency = int((time.time() - _bf_start) * 1000)
+            self._log_ai_call(
+                call_type="food_analysis",
+                model_name="doubao-seed-1-6-251015",
+                input_summary="餐前图片特征提取",
+                success=False,
+                latency_ms=_bf_latency,
+                error_message=str(e),
+            )
             print(f"餐前图片特征提取失败: {str(e)}")
             import traceback
             traceback.print_exc()
@@ -1794,6 +1880,7 @@ class AIService:
         before_features: dict
     ) -> dict:
         """使用豆包AI对比餐前餐后图片（Phase 57: 支持模板服务）"""
+        _cmp_start = time.time()
         try:
             before_data_uri = f"data:image/jpeg;base64,{before_image_base64}"
             after_data_uri = f"data:image/jpeg;base64,{after_image_base64}"
@@ -1882,11 +1969,32 @@ class AIService:
                                     break
             
             if content:
-                return self._parse_comparison_result(content)
+                result = self._parse_comparison_result(content)
+                # Phase 56: 记录成功的AI调用
+                _cmp_latency = int((time.time() - _cmp_start) * 1000)
+                self._log_ai_call(
+                    call_type="meal_comparison",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary="餐前餐后对比分析",
+                    success=True,
+                    latency_ms=_cmp_latency,
+                    output_summary=f"remaining={result.get('overall_remaining_ratio')}",
+                )
+                return result
             else:
                 raise Exception("豆包AI返回空响应")
                 
         except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _cmp_latency = int((time.time() - _cmp_start) * 1000)
+            self._log_ai_call(
+                call_type="meal_comparison",
+                model_name="doubao-seed-1-6-251015",
+                input_summary="餐前餐后对比分析",
+                success=False,
+                latency_ms=_cmp_latency,
+                error_message=str(e),
+            )
             print(f"餐前餐后对比失败: {str(e)}")
             import traceback
             traceback.print_exc()

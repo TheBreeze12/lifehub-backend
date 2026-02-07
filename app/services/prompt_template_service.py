@@ -155,10 +155,11 @@ class PromptTemplateService:
     @staticmethod
     def _builtin_exercise_intent() -> dict:
         return {
-            "version": "1.0",
-            "description": "运动意图提取Prompt模板（槽位提取：目的地、日期、卡路里目标、运动类型）",
+            "version": "1.1",
+            "description": "运动意图提取Prompt模板（槽位提取：目的地、日期、卡路里目标、运动类型、时长、强度）",
             "system_prompt": (
                 "你是一个运动规划意图解析助手。你的任务是从用户查询中提取餐后运动规划的关键信息，"
+                "包括运动类型、期望时长和运动强度，"
                 "并以严格的JSON格式返回。不要包含任何额外文字。"
             ),
             "few_shot_examples": [
@@ -170,7 +171,22 @@ class PromptTemplateService:
                         "endDate": "2026-03-01",
                         "days": 1,
                         "calories_target": 150,
-                        "exercise_type": "散步"
+                        "exercise_type": "散步",
+                        "duration_minutes": 30,
+                        "intensity": "低"
+                    }, ensure_ascii=False),
+                },
+                {
+                    "input": "用户查询：\"我想慢跑30分钟，中等强度\"\n系统当前日期：2026-03-01",
+                    "output": json.dumps({
+                        "destination": "健身步道",
+                        "startDate": "2026-03-01",
+                        "endDate": "2026-03-01",
+                        "days": 1,
+                        "calories_target": 300,
+                        "exercise_type": "慢跑",
+                        "duration_minutes": 30,
+                        "intensity": "中"
                     }, ensure_ascii=False),
                 },
                 {
@@ -181,7 +197,9 @@ class PromptTemplateService:
                         "endDate": "2026-03-08",
                         "days": 2,
                         "calories_target": 500,
-                        "exercise_type": "跑步"
+                        "exercise_type": "跑步",
+                        "duration_minutes": None,
+                        "intensity": "高"
                     }, ensure_ascii=False),
                 },
                 {
@@ -192,7 +210,9 @@ class PromptTemplateService:
                         "endDate": "2026-03-01",
                         "days": 1,
                         "calories_target": 300,
-                        "exercise_type": None
+                        "exercise_type": None,
+                        "duration_minutes": None,
+                        "intensity": None
                     }, ensure_ascii=False),
                 },
             ],
@@ -209,7 +229,14 @@ class PromptTemplateService:
                 "3. endDate: YYYY-MM-DD格式\n"
                 "4. days: 运动天数（整数）\n"
                 "5. calories_target: 目标消耗卡路里（整数，kcal）\n"
-                "6. exercise_type: 运动类型偏好（如未指定则为null）\n\n"
+                "6. exercise_type: 运动类型偏好（如\"散步\"、\"跑步\"、\"骑行\"、\"游泳\"等，未指定则为null）\n"
+                "7. duration_minutes: 期望运动时长（整数，分钟，如\"30分钟\"→30，未指定则为null）\n"
+                "8. intensity: 运动强度（\"低\"/\"中\"/\"高\"，根据运动类型和用户描述推断，未指定则为null）\n\n"
+                "强度推断规则：\n"
+                "- 散步/太极 → 低强度\n"
+                "- 慢跑/骑行/瑜伽 → 中强度\n"
+                "- 跑步/游泳/HIIT → 高强度\n"
+                "- 用户明确说\"中等强度\"、\"高强度\"等，直接使用\n\n"
                 "只返回JSON，不要其他解释。\n"
                 "严格禁止抄写任何示例值（尤其是日期）。"
                 "startDate/endDate必须根据用户查询或当前系统日期{today_date}计算。"
