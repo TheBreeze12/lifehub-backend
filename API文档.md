@@ -35,7 +35,7 @@
 | **用户** | `/api/user/data`               | GET  | 用户登录（旧版）   |
 | **用户** | `/api/user/preferences`        | GET  | 获取用户偏好       |
 | **用户** | `/api/user/preferences`        | PUT  | 更新用户偏好       |
-| **用户** | `/api/user/data`               | DELETE | 一键遗忘（Phase 55） |
+| **用户** | `/api/user/data`               | DELETE | 一键遗忘 |
 | **运动** | `/api/trip/generate`           | POST | 生成运动计划       |
 | **运动** | `/api/trip/routes`             | POST | 生成帕累托最优路径 |
 | **运动** | `/api/trip/list`               | GET  | 获取运动计划列表   |
@@ -43,8 +43,8 @@
 | **运动** | `/api/trip/home`               | GET  | 获取首页运动计划   |
 | **运动** | `/api/trip/{tripId}`           | GET  | 获取运动计划详情   |
 | **运动** | `/api/trip/plan-b/{plan_id}`   | GET  | 获取天气动态调整Plan B |
-| **运动** | `/api/trip/offline-package`    | POST | 生成离线运动包（Phase 46） |
-| **运动** | `/api/trip/offline-package/{package_id}` | GET | 下载离线运动包（Phase 46） |
+| **运动** | `/api/trip/offline-package`    | POST | 生成离线运动包 |
+| **运动** | `/api/trip/offline-package/{package_id}` | GET | 下载离线运动包 |
 | **天气** | `/api/weather/by-address`      | GET  | 根据地址查询天气   |
 | **天气** | `/api/weather/by-plan`         | GET  | 根据计划ID查询天气 |
 | **运动记录** | `/api/exercise/record`   | POST | 新增运动记录       |
@@ -52,8 +52,8 @@
 | **运动记录** | `/api/exercise/record/{record_id}` | GET | 查询运动记录详情 |
 | **运动记录** | `/api/exercise/record/{record_id}` | DELETE | 删除运动记录   |
 | **运动记录** | `/api/exercise/health`   | GET  | 运动记录服务健康检查 |
-| **统计** | `/api/stats/goal-progress`   | GET  | 健康目标达成率（Phase 36） |
-| **统计** | `/api/stats/exercise-frequency` | GET | 运动频率分析（Phase 51） |
+| **统计** | `/api/stats/goal-progress`   | GET  | 健康目标达成率 |
+| **统计** | `/api/stats/exercise-frequency` | GET | 运动频率分析 |
 
 ---
 
@@ -182,9 +182,9 @@ Content-Type: application/json
 | data.fat                 | float    | 脂肪（克/100g）                                   |
 | data.carbs               | float    | 碳水化合物（克/100g）                             |
 | data.recommendation      | string   | AI推荐理由                                        |
-| data.allergens           | string[] | AI推理的过敏原代码列表（Phase 7新增）             |
-| data.allergen_reasoning  | string   | 过敏原推理说明（Phase 7新增）                     |
-| data.cooking_method_comparisons | array | 不同烹饪方式的热量/脂肪对比（Phase 50新增） |
+| data.allergens           | string[] | AI推理的过敏原代码列表             |
+| data.allergen_reasoning  | string   | 过敏原推理说明                     |
+| data.cooking_method_comparisons | array | 不同烹饪方式的热量/脂肪对比 |
 | data.cooking_method_comparisons[].method | string | 烹饪方式名称 |
 | data.cooking_method_comparisons[].calories | float | 该烹饪方式下的热量（千卡/100g） |
 | data.cooking_method_comparisons[].fat | float | 该烹饪方式下的脂肪（克/100g） |
@@ -879,7 +879,7 @@ GET http://localhost:8000/api/food/allergen/categories
 
 ---
 
-### 9.5 个性化菜品推荐 ⭐（Phase 41）
+### 9.5 个性化菜品推荐
 
 **接口地址**: `GET /api/food/recommend`
 
