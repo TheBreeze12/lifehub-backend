@@ -20,11 +20,20 @@ from app.models.food import (
     ApiResponse,
     AllergenCheckRequest,
     AllergenCheckResponse,
-    AllergenCategoriesResponse
+    AllergenCategoriesResponse,
+    RecommendationResponse,
 )
+from app.models.meal_comparison import BeforeMealUploadResponse, AfterMealUploadResponse
+from app.services.meal_comparison_service import meal_comparison_service
+from app.db_models.meal_comparison import MealComparison
+import os
+import uuid
+import base64
+import json as json_module
 from app.db_models.diet_record import DietRecord
 from app.services.ai_service import AIService
 from app.services.allergen_service import allergen_service
+from app.services.recommendation_service import get_recommendation_service
 from app.database import get_db
 from app.db_models.user import User
 from app.db_models.menu_recognition import MenuRecognition
@@ -537,4 +546,344 @@ async def get_allergen_categories():
     except Exception as e:
         print(f"获取过敏原类别失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+# ==================== Phase 41: 个性化菜品推荐接口 ====================
+
+@router.get("/recommend", response_model=RecommendationResponse)
+async def get_food_recommendations(
+    user_id: int,
+    meal_type: str = "lunch",
+    limit: int = 5,
+    db: Session = Depends(get_db)
+):
+    """
+    获取个性化菜品推荐
+    
+    基于用户健康目标、热量配额、历史偏好的多因子推荐算法：
+    - 健康目标匹配（减脂/增肌/控糖/均衡）
+    - 热量配额过滤（根据当日剩余热量）
+    - 历史偏好排序（根据用户饮食记录）
+    - 过敏原过滤（自动排除含用户过敏原的菜品）
+    - 多样性保证（今天已吃过的菜品降权）
+    
+    - **user_id**: 用户ID（必填）
+    - **meal_type**: 餐次（breakfast/lunch/dinner/snack，默认lunch）
+    - **limit**: 返回推荐数量（默认5）
+    """
+    try:
+        recommendation_service = get_recommendation_service()
+        result = recommendation_service.get_recommendations(
+            db=db,
+            user_id=user_id,
+            meal_type=meal_type,
+            limit=limit
+        )
+        
+        print(f"✓ 用户 {user_id} 的{meal_type}推荐完成，共 {len(result.recommendations)} 道菜品")
+        
+        return RecommendationResponse(
+            code=200,
+            message="推荐成功",
+            data=result
+        )
+        
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        print(f"个性化推荐失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"推荐失败: {str(e)}")
+
+
+# ==================== 餐前餐后对比接口 (Phase 11) ====================
+
+# 图片上传目录配置
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "meal")
+
+
+def ensure_upload_dir():
+    """确保上传目录存在"""
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+    return UPLOAD_DIR
+
+
+@router.post("/meal/before", response_model=BeforeMealUploadResponse)
+async def upload_before_meal_image(
+    image: UploadFile = File(..., description="餐前食物图片"),
+    user_id: int = Form(..., description="用户ID"),
+    db: Session = Depends(get_db)
+):
+    """
+    上传餐前图片
+    
+    Phase 11: 餐前图片上传接口
+    
+    接收餐前食物图片，调用AI进行特征提取（菜品识别、份量估算、热量估算），
+    创建MealComparison记录并返回comparison_id供后续餐后上传使用。
+    
+    - **image**: 餐前食物图片文件（支持jpg, jpeg, png格式）
+    - **user_id**: 用户ID
+    
+    返回：
+    - comparison_id: 对比记录ID，用于后续餐后图片上传
+    - before_image_url: 餐前图片保存路径
+    - before_features: AI识别的菜品特征（菜品列表、估算热量等）
+    - status: 记录状态（pending_after表示等待餐后图片上传）
+    """
+    try:
+        # 验证文件类型
+        if not image.content_type or not image.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="请上传图片文件（支持jpg, jpeg, png格式）")
+        
+        # 验证用户是否存在
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail=f"用户不存在，user_id: {user_id}")
+        
+        # 确保上传目录存在
+        upload_dir = ensure_upload_dir()
+        
+        # 生成唯一文件名
+        file_ext = os.path.splitext(image.filename)[1] if image.filename else ".jpg"
+        if not file_ext:
+            file_ext = ".jpg"
+        unique_filename = f"before_{user_id}_{uuid.uuid4().hex}{file_ext}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        # 读取图片内容
+        if hasattr(image.file, 'seek'):
+            image.file.seek(0)
+        image_bytes = await image.read()
+        
+        # 保存图片到本地
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+        
+        # 相对路径（用于存储到数据库）
+        relative_path = f"/uploads/meal/{unique_filename}"
+        
+        # 将图片转换为base64
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # 调用AI服务提取餐前图片特征
+        try:
+            before_features = ai_service.extract_before_meal_features(image_base64)
+        except Exception as ai_error:
+            print(f"AI特征提取失败，使用默认值: {str(ai_error)}")
+            # AI调用失败时返回空特征
+            before_features = {
+                "dishes": [],
+                "total_estimated_calories": 0,
+                "total_estimated_protein": 0,
+                "total_estimated_fat": 0,
+                "total_estimated_carbs": 0
+            }
+        
+        # 创建MealComparison记录
+        meal_comparison = MealComparison(
+            user_id=user_id,
+            before_image_url=relative_path,
+            before_features=json_module.dumps(before_features, ensure_ascii=False),
+            original_calories=before_features.get("total_estimated_calories", 0),
+            original_protein=before_features.get("total_estimated_protein", 0),
+            original_fat=before_features.get("total_estimated_fat", 0),
+            original_carbs=before_features.get("total_estimated_carbs", 0),
+            status="pending_after"
+        )
+        
+        db.add(meal_comparison)
+        db.commit()
+        db.refresh(meal_comparison)
+        
+        print(f"✓ 已创建用户 {user_id} 的餐前对比记录，comparison_id: {meal_comparison.id}")
+        
+        return BeforeMealUploadResponse(
+            code=200,
+            message="餐前图片上传成功",
+            data={
+                "comparison_id": meal_comparison.id,
+                "before_image_url": relative_path,
+                "before_features": before_features,
+                "status": "pending_after"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"餐前图片上传失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"餐前图片上传失败: {str(e)}")
+
+
+# ==================== Phase 12: 餐后图片上传与对比计算 ====================
+
+@router.post("/meal/after/{comparison_id}", response_model=AfterMealUploadResponse)
+async def upload_after_meal_image(
+    comparison_id: int,
+    image: UploadFile = File(..., description="餐后食物图片"),
+    db: Session = Depends(get_db)
+):
+    """
+    上传餐后图片并计算净摄入量
+    
+    Phase 12: 餐后图片上传与对比计算接口
+    
+    接收餐后食物图片，调用AI对比餐前餐后图片，计算剩余比例和净摄入热量，
+    更新MealComparison记录并返回对比结果。
+    
+    - **comparison_id**: 餐前上传时返回的对比记录ID
+    - **image**: 餐后食物图片文件（支持jpg, jpeg, png格式）
+    
+    返回：
+    - comparison_id: 对比记录ID
+    - before_image_url: 餐前图片路径
+    - after_image_url: 餐后图片路径
+    - consumption_ratio: 消耗比例（0-1，1表示全部吃完）
+    - original_calories: 原始估算热量
+    - net_calories: 净摄入热量 = 原始热量 × 消耗比例
+    - comparison_analysis: AI对比分析说明
+    - status: 记录状态（completed表示对比完成）
+    """
+    try:
+        # 验证文件类型
+        if not image.content_type or not image.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="请上传图片文件（支持jpg, jpeg, png格式）")
+        
+        # 查询对比记录是否存在
+        comparison = db.query(MealComparison).filter(MealComparison.id == comparison_id).first()
+        if not comparison:
+            raise HTTPException(status_code=404, detail=f"对比记录不存在，comparison_id: {comparison_id}")
+        
+        # 检查状态
+        if comparison.status == "completed":
+            raise HTTPException(status_code=400, detail="该对比记录已完成，请勿重复上传")
+        
+        if comparison.status != "pending_after":
+            raise HTTPException(status_code=400, detail=f"对比记录状态异常: {comparison.status}")
+        
+        # 确保上传目录存在
+        upload_dir = ensure_upload_dir()
+        
+        # 生成唯一文件名
+        file_ext = os.path.splitext(image.filename)[1] if image.filename else ".jpg"
+        if not file_ext:
+            file_ext = ".jpg"
+        unique_filename = f"after_{comparison.user_id}_{comparison_id}_{uuid.uuid4().hex}{file_ext}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        # 读取图片内容
+        if hasattr(image.file, 'seek'):
+            image.file.seek(0)
+        after_image_bytes = await image.read()
+        
+        # 保存图片到本地
+        with open(file_path, "wb") as f:
+            f.write(after_image_bytes)
+        
+        # 相对路径
+        after_relative_path = f"/uploads/meal/{unique_filename}"
+        
+        # 将餐后图片转换为base64
+        after_image_base64 = base64.b64encode(after_image_bytes).decode('utf-8')
+        
+        # 读取餐前图片用于对比
+        before_image_base64 = None
+        before_features = {}
+        
+        if comparison.before_image_url:
+            before_file_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                comparison.before_image_url.lstrip('/')
+            )
+            if os.path.exists(before_file_path):
+                with open(before_file_path, "rb") as f:
+                    before_image_base64 = base64.b64encode(f.read()).decode('utf-8')
+        
+        # 解析餐前特征
+        if comparison.before_features:
+            try:
+                before_features = json_module.loads(comparison.before_features)
+            except json_module.JSONDecodeError:
+                before_features = {}
+        
+        # 调用AI服务对比餐前餐后图片
+        comparison_result = None
+        try:
+            if before_image_base64:
+                comparison_result = ai_service.compare_before_after_meal(
+                    before_image_base64,
+                    after_image_base64,
+                    before_features
+                )
+            else:
+                # 如果没有餐前图片，默认假设吃掉了一半
+                comparison_result = {
+                    "dishes": [],
+                    "overall_remaining_ratio": 0.5,
+                    "consumption_ratio": 0.5,
+                    "comparison_analysis": "无法读取餐前图片，默认估算您吃掉了约50%的食物。"
+                }
+        except Exception as ai_error:
+            print(f"AI对比失败，使用默认值: {str(ai_error)}")
+            comparison_result = {
+                "dishes": [],
+                "overall_remaining_ratio": 0.25,
+                "consumption_ratio": 0.75,
+                "comparison_analysis": "AI分析暂时不可用，默认估算您吃掉了约75%的食物。"
+            }
+        
+        # 提取对比结果
+        consumption_ratio = comparison_result.get("consumption_ratio", 0.75)
+        after_features = {
+            "dishes": comparison_result.get("dishes", []),
+            "overall_remaining_ratio": comparison_result.get("overall_remaining_ratio", 0.25)
+        }
+        comparison_analysis = comparison_result.get("comparison_analysis", "对比完成")
+        
+        # 使用meal_comparison_service更新记录
+        updated_comparison = meal_comparison_service.update_comparison_with_after_meal(
+            db=db,
+            comparison=comparison,
+            after_image_url=after_relative_path,
+            after_features=after_features,
+            consumption_ratio=consumption_ratio,
+            comparison_analysis=comparison_analysis
+        )
+        
+        print(f"✓ 用户 {comparison.user_id} 的餐后对比完成，comparison_id: {comparison_id}, 消耗比例: {consumption_ratio:.2%}")
+        
+        # 构建响应
+        return AfterMealUploadResponse(
+            code=200,
+            message="餐后图片上传成功，对比完成",
+            data={
+                "comparison_id": updated_comparison.id,
+                "before_image_url": updated_comparison.before_image_url,
+                "after_image_url": updated_comparison.after_image_url,
+                "consumption_ratio": updated_comparison.consumption_ratio,
+                "original_calories": updated_comparison.original_calories,
+                "net_calories": updated_comparison.net_calories,
+                "original_protein": updated_comparison.original_protein,
+                "original_fat": updated_comparison.original_fat,
+                "original_carbs": updated_comparison.original_carbs,
+                "net_protein": updated_comparison.net_protein,
+                "net_fat": updated_comparison.net_fat,
+                "net_carbs": updated_comparison.net_carbs,
+                "comparison_analysis": updated_comparison.comparison_analysis,
+                "status": updated_comparison.status
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"餐后图片上传失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"餐后图片上传失败: {str(e)}")
 

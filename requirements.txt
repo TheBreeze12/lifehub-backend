@@ -13,4 +13,11 @@ cryptography==42.0.0
 geopy==2.4.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-
+pymoo==0.6.1.1
+numpy>=1.21.0
+osmnx==1.9.3
+networkx>=3.0
+scikit-learn>=1.0.0
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+torch>=2.0.0

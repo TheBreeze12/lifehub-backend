@@ -232,3 +232,102 @@ class RefreshTokenResponse(BaseModel):
                 }
             }
         }
+
+
+# ============================================================
+# Phase 55: 一键"遗忘"功能 - 用户数据完全删除
+# ============================================================
+
+class DeletedCounts(BaseModel):
+    """各表删除数量统计"""
+    diet_records: int = Field(default=0, description="删除的饮食记录数")
+    exercise_records: int = Field(default=0, description="删除的运动记录数")
+    meal_comparisons: int = Field(default=0, description="删除的餐前餐后对比数")
+    menu_recognitions: int = Field(default=0, description="删除的菜单识别记录数")
+    trip_plans: int = Field(default=0, description="删除的运动计划数")
+
+
+class DataForgetData(BaseModel):
+    """数据删除结果"""
+    user_id: int = Field(..., description="被删除的用户ID")
+    nickname: str = Field(..., description="被删除用户的昵称")
+    deleted_counts: DeletedCounts = Field(..., description="各表删除数量")
+    total_deleted: int = Field(..., description="总计删除记录数")
+
+
+class DataForgetResponse(BaseModel):
+    """一键遗忘API响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    data: Optional[DataForgetData] = Field(None, description="删除结果数据")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "code": 200,
+                "message": "数据删除成功",
+                "data": {
+                    "user_id": 123,
+                    "nickname": "健康达人",
+                    "deleted_counts": {
+                        "diet_records": 15,
+                        "exercise_records": 8,
+                        "meal_comparisons": 3,
+                        "menu_recognitions": 5,
+                        "trip_plans": 4
+                    },
+                    "total_deleted": 35
+                }
+            }
+        }
+
+
+# ============================================================
+# Phase 56: AI调用记录/日志查看
+# ============================================================
+
+class AiCallLogItem(BaseModel):
+    """单条AI调用日志数据"""
+    id: int = Field(..., description="日志ID")
+    user_id: Optional[int] = Field(None, description="用户ID")
+    call_type: str = Field(..., description="调用类型")
+    model_name: str = Field(..., description="模型名称")
+    input_summary: Optional[str] = Field(None, description="输入摘要")
+    output_summary: Optional[str] = Field(None, description="输出摘要")
+    success: bool = Field(..., description="是否成功")
+    error_message: Optional[str] = Field(None, description="错误信息")
+    latency_ms: Optional[int] = Field(None, description="耗时（毫秒）")
+    token_usage: Optional[int] = Field(None, description="Token使用量")
+    created_at: Optional[str] = Field(None, description="创建时间")
+
+
+class AiCallLogListData(BaseModel):
+    """AI调用日志列表数据"""
+    total: int = Field(..., description="总记录数")
+    logs: List[AiCallLogItem] = Field(default_factory=list, description="日志列表")
+
+
+class AiCallLogResponse(BaseModel):
+    """AI调用日志列表API响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    data: Optional[AiCallLogListData] = Field(None, description="日志列表数据")
+
+
+class AiCallLogStatsData(BaseModel):
+    """AI调用统计数据"""
+    total_calls: int = Field(default=0, description="总调用次数")
+    success_count: int = Field(default=0, description="成功次数")
+    failure_count: int = Field(default=0, description="失败次数")
+    success_rate: float = Field(default=0.0, description="成功率")
+    avg_latency_ms: float = Field(default=0.0, description="平均延迟（毫秒）")
+    call_type_distribution: Optional[dict] = Field(default_factory=dict, description="调用类型分布")
+    model_distribution: Optional[dict] = Field(default_factory=dict, description="模型分布")
+    recent_7days_count: int = Field(default=0, description="最近7天调用数")
+
+
+class AiCallLogStatsResponse(BaseModel):
+    """AI调用统计API响应"""
+    code: int = Field(..., description="状态码，200表示成功")
+    message: str = Field(..., description="消息")
+    data: Optional[AiCallLogStatsData] = Field(None, description="统计数据")

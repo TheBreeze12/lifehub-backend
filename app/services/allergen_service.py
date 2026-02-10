@@ -12,8 +12,12 @@
 7. 小麦（麸质）
 8. 大豆
 """
+import json
+import logging
 from typing import List, Dict, Optional, Set
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -425,6 +429,200 @@ class AllergenService:
             }
         }
         
+        return result
+
+
+    def check_allergens_with_rag(
+        self,
+        food_name: str,
+        ingredients: Optional[List[str]] = None,
+        user_allergens: Optional[List[str]] = None,
+    ) -> Dict:
+        """
+        Phase 39: 结合知识图谱 RAG 的增强过敏原检测
+
+        先执行关键词匹配检测，再通过菜谱知识图谱 RAG 检索补充隐性过敏原，
+        最终合并两种来源的检测结果。
+
+        Args:
+            food_name: 菜品名称
+            ingredients: 配料列表（可选）
+            user_allergens: 用户的过敏原列表（用于匹配告警）
+
+        Returns:
+            合并后的过敏原检测结果字典
+        """
+        # 1. 基础关键词检测
+        keyword_result = self.check_allergens(
+            food_name=food_name,
+            ingredients=ingredients,
+            user_allergens=user_allergens,
+        )
+
+        # 2. 知识图谱 RAG 检索
+        rag_allergens = []
+        rag_reasoning = ""
+        rag_ingredients = []
+        try:
+            from app.services.recipe_graph_service import get_recipe_graph_service
+            rgs = get_recipe_graph_service()
+            detail = rgs.get_full_allergen_detail(food_name, max_distance=0.8)
+
+            if detail.get("matched", False):
+                rag_allergens = detail.get("allergen_codes", [])
+                rag_ingredients = detail.get("ingredients", [])
+                hidden_notes = detail.get("hidden_allergen_notes", "")
+                hidden_codes = detail.get("hidden_allergen_codes", [])
+
+                # 构建推理说明
+                reasoning_parts = []
+                if hidden_codes:
+                    reasoning_parts.append(
+                        f"知识图谱检测到隐性过敏原: {', '.join(hidden_codes)}"
+                    )
+                if hidden_notes:
+                    reasoning_parts.append(f"说明: {hidden_notes}")
+                rag_reasoning = "; ".join(reasoning_parts) if reasoning_parts else ""
+
+                logger.info(
+                    f"知识图谱 RAG 检测到 {len(rag_allergens)} 种过敏原 "
+                    f"(菜品: {food_name}, 匹配: {detail.get('dish_name', '')})"
+                )
+        except Exception as e:
+            logger.warning(f"知识图谱 RAG 检索失败，降级为纯关键词检测: {e}")
+
+        # 如果 RAG 没有返回新信息，直接返回关键词结果
+        if not rag_allergens:
+            return keyword_result
+
+        # 3. 合并关键词检测与 RAG 检索结果
+        merged = self._merge_keyword_and_rag(
+            food_name=food_name,
+            keyword_result=keyword_result,
+            rag_allergen_codes=rag_allergens,
+            rag_reasoning=rag_reasoning,
+            rag_ingredients=rag_ingredients,
+            user_allergens=user_allergens,
+        )
+
+        return merged
+
+    def _merge_keyword_and_rag(
+        self,
+        food_name: str,
+        keyword_result: Dict,
+        rag_allergen_codes: List[str],
+        rag_reasoning: str,
+        rag_ingredients: List[str],
+        user_allergens: Optional[List[str]] = None,
+    ) -> Dict:
+        """
+        Phase 39: 合并关键词检测与知识图谱 RAG 结果
+
+        Args:
+            food_name: 菜品名称
+            keyword_result: 关键词检测结果
+            rag_allergen_codes: RAG 检索到的过敏原代码列表
+            rag_reasoning: RAG 推理说明
+            rag_ingredients: RAG 检索到的配料列表
+            user_allergens: 用户的过敏原列表
+
+        Returns:
+            合并后的检测结果
+        """
+        # 从关键词检测结果中获取已检测的过敏原代码
+        keyword_codes = set(
+            a.get("code") for a in keyword_result.get("detected_allergens", [])
+        )
+        rag_codes = set(rag_allergen_codes) if rag_allergen_codes else set()
+
+        # 合并过敏原
+        merged_allergens = []
+        all_codes = keyword_codes | rag_codes
+
+        for code in all_codes:
+            if code not in self.categories:
+                continue
+
+            category = self.categories[code]
+            from_keyword = code in keyword_codes
+            from_rag = code in rag_codes
+
+            # 获取关键词匹配信息
+            matched_keywords = []
+            if from_keyword:
+                for allergen in keyword_result.get("detected_allergens", []):
+                    if allergen.get("code") == code:
+                        matched_keywords = allergen.get("matched_keywords", [])
+                        break
+
+            # 确定来源和置信度
+            if from_keyword and from_rag:
+                source = "keyword+rag"
+                confidence = "high"
+            elif from_keyword:
+                source = "keyword"
+                confidence = "high" if len(matched_keywords) > 1 else "medium"
+            else:
+                source = "rag"
+                confidence = "medium"
+
+            allergen_info = {
+                "code": category.code,
+                "name": category.name,
+                "name_en": category.name_en,
+                "matched_keywords": matched_keywords,
+                "confidence": confidence,
+                "source": source,
+            }
+            merged_allergens.append(allergen_info)
+
+        # 生成警告
+        warnings = []
+        if user_allergens:
+            user_allergen_lower = [a.lower() for a in user_allergens]
+            for allergen in merged_allergens:
+                if (
+                    allergen["name"] in user_allergens
+                    or allergen["name_en"].lower() in user_allergen_lower
+                    or allergen["code"] in user_allergen_lower
+                    or any(kw in user_allergens for kw in allergen.get("matched_keywords", []))
+                ):
+                    source_text = {
+                        "keyword": "关键词匹配",
+                        "rag": "知识图谱推理",
+                        "keyword+rag": "关键词匹配和知识图谱推理",
+                    }.get(allergen.get("source", ""), "检测")
+
+                    warnings.append({
+                        "allergen": allergen["name"],
+                        "level": "high",
+                        "message": f"警告：通过{source_text}检测到您的过敏原【{allergen['name']}】",
+                    })
+
+        # 构建结果
+        result = {
+            "food_name": food_name,
+            "detected_allergens": merged_allergens,
+            "allergen_count": len(merged_allergens),
+            "has_allergens": len(merged_allergens) > 0,
+            "warnings": warnings,
+            "has_warnings": len(warnings) > 0,
+            "rag_reasoning": rag_reasoning,
+            "detection_methods": {
+                "keyword_count": len(keyword_codes),
+                "rag_count": len(rag_codes),
+                "merged_count": len(merged_allergens),
+            },
+        }
+
+        # 合并配料信息
+        existing_ingredients = keyword_result.get("ingredients")
+        if existing_ingredients:
+            result["ingredients"] = existing_ingredients
+        elif rag_ingredients:
+            result["ingredients"] = rag_ingredients
+
         return result
 
 

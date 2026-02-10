@@ -1,0 +1,1262 @@
+[
+  {
+    "exercise_name": "散步",
+    "aliases": ["走路", "慢步走", "遛弯"],
+    "category": "步行类",
+    "mets": 2.5,
+    "intensity": "light",
+    "description": "缓慢散步（约3km/h）",
+    "calories_per_kg_per_hour": 2.5,
+    "suitable_for": ["老年人", "康复期", "餐后消食"]
+  },
+  {
+    "exercise_name": "步行",
+    "aliases": ["走路", "普通走路"],
+    "category": "步行类",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "普通速度步行（约4-5km/h）",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["日常通勤", "轻度运动"]
+  },
+  {
+    "exercise_name": "快走",
+    "aliases": ["快步走", "健步走", "快速步行"],
+    "category": "步行类",
+    "mets": 4.3,
+    "intensity": "moderate",
+    "description": "快速步行（约5.5-6.5km/h）",
+    "calories_per_kg_per_hour": 4.3,
+    "suitable_for": ["减脂", "心肺训练"]
+  },
+  {
+    "exercise_name": "竞走",
+    "aliases": ["竞技走", "race walking"],
+    "category": "步行类",
+    "mets": 6.5,
+    "intensity": "vigorous",
+    "description": "竞走运动（约7-9km/h）",
+    "calories_per_kg_per_hour": 6.5,
+    "suitable_for": ["竞技训练", "高强度有氧"]
+  },
+  {
+    "exercise_name": "徒步",
+    "aliases": ["远足", "hiking", "野外徒步"],
+    "category": "步行类",
+    "mets": 5.3,
+    "intensity": "moderate",
+    "description": "野外徒步、山地行走",
+    "calories_per_kg_per_hour": 5.3,
+    "suitable_for": ["户外爱好者", "团队活动"]
+  },
+  {
+    "exercise_name": "登山",
+    "aliases": ["爬山", "山地徒步", "攀山"],
+    "category": "步行类",
+    "mets": 6.5,
+    "intensity": "vigorous",
+    "description": "登山运动，含上下坡",
+    "calories_per_kg_per_hour": 6.5,
+    "suitable_for": ["户外爱好者", "耐力训练"]
+  },
+  {
+    "exercise_name": "爬楼梯",
+    "aliases": ["楼梯运动", "上楼梯", "stair climbing"],
+    "category": "步行类",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "持续爬楼梯运动",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["室内替代", "下半身训练"]
+  },
+  {
+    "exercise_name": "下楼梯",
+    "aliases": ["下台阶"],
+    "category": "步行类",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "下楼梯运动",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["日常活动"]
+  },
+  {
+    "exercise_name": "北欧式健走",
+    "aliases": ["持杖行走", "Nordic walking"],
+    "category": "步行类",
+    "mets": 4.8,
+    "intensity": "moderate",
+    "description": "使用手杖的北欧式健走",
+    "calories_per_kg_per_hour": 4.8,
+    "suitable_for": ["全身运动", "关节保护"]
+  },
+  {
+    "exercise_name": "慢跑",
+    "aliases": ["jogging", "轻松跑"],
+    "category": "跑步类",
+    "mets": 7.0,
+    "intensity": "moderate",
+    "description": "轻松慢跑（约6-7km/h）",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["减脂", "心肺训练", "入门跑者"]
+  },
+  {
+    "exercise_name": "跑步",
+    "aliases": ["running", "中速跑"],
+    "category": "跑步类",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "中等速度跑步（约8km/h）",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["减脂", "耐力训练"]
+  },
+  {
+    "exercise_name": "快速跑步",
+    "aliases": ["快跑", "fast running"],
+    "category": "跑步类",
+    "mets": 10.0,
+    "intensity": "vigorous",
+    "description": "快速跑步（约10km/h）",
+    "calories_per_kg_per_hour": 10.0,
+    "suitable_for": ["竞技训练", "高强度有氧"]
+  },
+  {
+    "exercise_name": "冲刺跑",
+    "aliases": ["sprint", "短跑冲刺", "百米冲刺"],
+    "category": "跑步类",
+    "mets": 12.0,
+    "intensity": "vigorous",
+    "description": "全力冲刺跑",
+    "calories_per_kg_per_hour": 12.0,
+    "suitable_for": ["爆发力训练", "竞技"]
+  },
+  {
+    "exercise_name": "越野跑",
+    "aliases": ["trail running", "山地跑"],
+    "category": "跑步类",
+    "mets": 9.0,
+    "intensity": "vigorous",
+    "description": "越野路面跑步",
+    "calories_per_kg_per_hour": 9.0,
+    "suitable_for": ["越野爱好者", "耐力训练"]
+  },
+  {
+    "exercise_name": "马拉松训练",
+    "aliases": ["长跑训练", "marathon training"],
+    "category": "跑步类",
+    "mets": 9.5,
+    "intensity": "vigorous",
+    "description": "马拉松配速长距离训练",
+    "calories_per_kg_per_hour": 9.5,
+    "suitable_for": ["马拉松备战", "耐力训练"]
+  },
+  {
+    "exercise_name": "间歇跑",
+    "aliases": ["interval running", "HIIT跑步", "变速跑"],
+    "category": "跑步类",
+    "mets": 10.5,
+    "intensity": "vigorous",
+    "description": "高强度间歇跑训练",
+    "calories_per_kg_per_hour": 10.5,
+    "suitable_for": ["高效减脂", "心肺提升"]
+  },
+  {
+    "exercise_name": "骑行",
+    "aliases": ["骑车", "骑自行车", "cycling"],
+    "category": "骑行类",
+    "mets": 6.0,
+    "intensity": "moderate",
+    "description": "普通速度骑自行车（约15-20km/h）",
+    "calories_per_kg_per_hour": 6.0,
+    "suitable_for": ["通勤", "有氧运动"]
+  },
+  {
+    "exercise_name": "休闲骑行",
+    "aliases": ["慢骑", "leisure cycling", "悠闲骑车"],
+    "category": "骑行类",
+    "mets": 4.0,
+    "intensity": "light",
+    "description": "休闲慢骑（约10-15km/h）",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["休闲娱乐", "低强度运动"]
+  },
+  {
+    "exercise_name": "快速骑行",
+    "aliases": ["竞速骑行", "fast cycling"],
+    "category": "骑行类",
+    "mets": 10.0,
+    "intensity": "vigorous",
+    "description": "快速骑行（约25km/h以上）",
+    "calories_per_kg_per_hour": 10.0,
+    "suitable_for": ["竞技训练", "高强度有氧"]
+  },
+  {
+    "exercise_name": "山地车骑行",
+    "aliases": ["山地骑行", "MTB", "越野骑行"],
+    "category": "骑行类",
+    "mets": 8.5,
+    "intensity": "vigorous",
+    "description": "山地车越野骑行",
+    "calories_per_kg_per_hour": 8.5,
+    "suitable_for": ["越野爱好者", "全身运动"]
+  },
+  {
+    "exercise_name": "动感单车",
+    "aliases": ["室内骑行", "spinning", "单车课"],
+    "category": "骑行类",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "室内动感单车训练",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["室内有氧", "减脂"]
+  },
+  {
+    "exercise_name": "游泳",
+    "aliases": ["swimming", "自由泳"],
+    "category": "水上运动",
+    "mets": 7.0,
+    "intensity": "moderate",
+    "description": "中等强度游泳",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["全身运动", "低关节冲击"]
+  },
+  {
+    "exercise_name": "休闲游泳",
+    "aliases": ["戏水", "慢速游泳"],
+    "category": "水上运动",
+    "mets": 5.0,
+    "intensity": "light",
+    "description": "轻松游泳/戏水",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["休闲", "水中放松"]
+  },
+  {
+    "exercise_name": "快速游泳",
+    "aliases": ["竞速游泳", "fast swimming"],
+    "category": "水上运动",
+    "mets": 10.0,
+    "intensity": "vigorous",
+    "description": "竞速游泳",
+    "calories_per_kg_per_hour": 10.0,
+    "suitable_for": ["竞技训练", "高强度有氧"]
+  },
+  {
+    "exercise_name": "蛙泳",
+    "aliases": ["breaststroke"],
+    "category": "水上运动",
+    "mets": 5.3,
+    "intensity": "moderate",
+    "description": "蛙泳",
+    "calories_per_kg_per_hour": 5.3,
+    "suitable_for": ["入门泳姿", "适中强度"]
+  },
+  {
+    "exercise_name": "蝶泳",
+    "aliases": ["butterfly stroke"],
+    "category": "水上运动",
+    "mets": 11.0,
+    "intensity": "vigorous",
+    "description": "蝶泳",
+    "calories_per_kg_per_hour": 11.0,
+    "suitable_for": ["高级泳者", "高强度训练"]
+  },
+  {
+    "exercise_name": "仰泳",
+    "aliases": ["backstroke"],
+    "category": "水上运动",
+    "mets": 4.8,
+    "intensity": "moderate",
+    "description": "仰泳",
+    "calories_per_kg_per_hour": 4.8,
+    "suitable_for": ["放松泳姿", "背部训练"]
+  },
+  {
+    "exercise_name": "水中有氧",
+    "aliases": ["水中操", "aqua aerobics"],
+    "category": "水上运动",
+    "mets": 5.5,
+    "intensity": "moderate",
+    "description": "水中有氧操",
+    "calories_per_kg_per_hour": 5.5,
+    "suitable_for": ["低冲击有氧", "关节友好"]
+  },
+  {
+    "exercise_name": "皮划艇",
+    "aliases": ["划船", "kayaking", "独木舟"],
+    "category": "水上运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "休闲皮划艇",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["户外水上运动", "上肢训练"]
+  },
+  {
+    "exercise_name": "冲浪",
+    "aliases": ["surfing", "滑浪"],
+    "category": "水上运动",
+    "mets": 3.0,
+    "intensity": "moderate",
+    "description": "冲浪运动",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["海上运动", "平衡训练"]
+  },
+  {
+    "exercise_name": "篮球",
+    "aliases": ["打篮球", "basketball"],
+    "category": "球类运动",
+    "mets": 6.5,
+    "intensity": "moderate",
+    "description": "打篮球（一般性）",
+    "calories_per_kg_per_hour": 6.5,
+    "suitable_for": ["团队运动", "全身运动"]
+  },
+  {
+    "exercise_name": "篮球比赛",
+    "aliases": ["全场篮球", "basketball game"],
+    "category": "球类运动",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "篮球正式比赛",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["竞技", "高强度有氧"]
+  },
+  {
+    "exercise_name": "足球",
+    "aliases": ["踢足球", "soccer", "football"],
+    "category": "球类运动",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "踢足球",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["团队运动", "耐力训练"]
+  },
+  {
+    "exercise_name": "羽毛球",
+    "aliases": ["打羽毛球", "badminton"],
+    "category": "球类运动",
+    "mets": 5.5,
+    "intensity": "moderate",
+    "description": "打羽毛球（一般性）",
+    "calories_per_kg_per_hour": 5.5,
+    "suitable_for": ["灵活性", "反应训练"]
+  },
+  {
+    "exercise_name": "羽毛球比赛",
+    "aliases": ["竞技羽毛球"],
+    "category": "球类运动",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "羽毛球竞技比赛",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["竞技", "高强度"]
+  },
+  {
+    "exercise_name": "网球",
+    "aliases": ["打网球", "tennis"],
+    "category": "球类运动",
+    "mets": 7.0,
+    "intensity": "moderate",
+    "description": "打网球（单打）",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["全身运动", "反应训练"]
+  },
+  {
+    "exercise_name": "网球双打",
+    "aliases": ["双打网球"],
+    "category": "球类运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "网球双打",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["社交运动", "适中强度"]
+  },
+  {
+    "exercise_name": "乒乓球",
+    "aliases": ["打乒乓球", "table tennis", "台球拍"],
+    "category": "球类运动",
+    "mets": 4.0,
+    "intensity": "light",
+    "description": "打乒乓球",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["室内运动", "反应训练"]
+  },
+  {
+    "exercise_name": "排球",
+    "aliases": ["打排球", "volleyball"],
+    "category": "球类运动",
+    "mets": 4.0,
+    "intensity": "moderate",
+    "description": "打排球（一般性）",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["团队运动", "弹跳训练"]
+  },
+  {
+    "exercise_name": "沙滩排球",
+    "aliases": ["beach volleyball"],
+    "category": "球类运动",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "沙滩排球",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["高强度户外", "全身运动"]
+  },
+  {
+    "exercise_name": "高尔夫",
+    "aliases": ["打高尔夫", "golf"],
+    "category": "球类运动",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "高尔夫（步行带球杆）",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["休闲运动", "社交"]
+  },
+  {
+    "exercise_name": "棒球",
+    "aliases": ["打棒球", "baseball"],
+    "category": "球类运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "打棒球/垒球",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["团队运动"]
+  },
+  {
+    "exercise_name": "橄榄球",
+    "aliases": ["美式足球", "rugby"],
+    "category": "球类运动",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "橄榄球运动",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["高强度对抗"]
+  },
+  {
+    "exercise_name": "手球",
+    "aliases": ["handball"],
+    "category": "球类运动",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "手球运动",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["团队竞技"]
+  },
+  {
+    "exercise_name": "壁球",
+    "aliases": ["squash", "墙球"],
+    "category": "球类运动",
+    "mets": 7.3,
+    "intensity": "vigorous",
+    "description": "壁球运动",
+    "calories_per_kg_per_hour": 7.3,
+    "suitable_for": ["室内高强度"]
+  },
+  {
+    "exercise_name": "板球",
+    "aliases": ["cricket"],
+    "category": "球类运动",
+    "mets": 4.8,
+    "intensity": "moderate",
+    "description": "板球运动",
+    "calories_per_kg_per_hour": 4.8,
+    "suitable_for": ["团队运动"]
+  },
+  {
+    "exercise_name": "保龄球",
+    "aliases": ["bowling"],
+    "category": "球类运动",
+    "mets": 3.0,
+    "intensity": "light",
+    "description": "保龄球",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["室内休闲"]
+  },
+  {
+    "exercise_name": "台球",
+    "aliases": ["桌球", "billiards", "snooker"],
+    "category": "球类运动",
+    "mets": 2.5,
+    "intensity": "light",
+    "description": "打台球",
+    "calories_per_kg_per_hour": 2.5,
+    "suitable_for": ["室内休闲"]
+  },
+  {
+    "exercise_name": "曲棍球",
+    "aliases": ["hockey", "陆地曲棍球"],
+    "category": "球类运动",
+    "mets": 7.8,
+    "intensity": "vigorous",
+    "description": "曲棍球运动",
+    "calories_per_kg_per_hour": 7.8,
+    "suitable_for": ["竞技运动"]
+  },
+  {
+    "exercise_name": "瑜伽",
+    "aliases": ["yoga", "哈他瑜伽"],
+    "category": "柔韧与平衡",
+    "mets": 2.5,
+    "intensity": "light",
+    "description": "一般瑜伽练习",
+    "calories_per_kg_per_hour": 2.5,
+    "suitable_for": ["柔韧性", "放松减压"]
+  },
+  {
+    "exercise_name": "流瑜伽",
+    "aliases": ["vinyasa yoga", "力量瑜伽", "ashtanga"],
+    "category": "柔韧与平衡",
+    "mets": 4.0,
+    "intensity": "moderate",
+    "description": "流瑜伽/力量瑜伽",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["力量柔韧", "核心训练"]
+  },
+  {
+    "exercise_name": "高温瑜伽",
+    "aliases": ["热瑜伽", "bikram yoga", "hot yoga"],
+    "category": "柔韧与平衡",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "高温环境下的瑜伽练习",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["排毒", "深度伸展"]
+  },
+  {
+    "exercise_name": "普拉提",
+    "aliases": ["Pilates", "垫上普拉提"],
+    "category": "柔韧与平衡",
+    "mets": 3.0,
+    "intensity": "light",
+    "description": "普拉提练习",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["核心训练", "体态矫正"]
+  },
+  {
+    "exercise_name": "太极拳",
+    "aliases": ["太极", "tai chi", "太极拳练习"],
+    "category": "柔韧与平衡",
+    "mets": 3.0,
+    "intensity": "light",
+    "description": "太极拳练习",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["老年人", "平衡训练", "减压"]
+  },
+  {
+    "exercise_name": "拉伸",
+    "aliases": ["stretching", "伸展运动", "柔韧训练"],
+    "category": "柔韧与平衡",
+    "mets": 2.3,
+    "intensity": "light",
+    "description": "静态/动态拉伸",
+    "calories_per_kg_per_hour": 2.3,
+    "suitable_for": ["热身", "恢复", "柔韧性"]
+  },
+  {
+    "exercise_name": "气功",
+    "aliases": ["八段锦", "五禽戏"],
+    "category": "柔韧与平衡",
+    "mets": 2.5,
+    "intensity": "light",
+    "description": "气功/传统养生功法",
+    "calories_per_kg_per_hour": 2.5,
+    "suitable_for": ["养生", "老年人"]
+  },
+  {
+    "exercise_name": "力量训练",
+    "aliases": ["举重", "器械训练", "weight training", "抗阻训练"],
+    "category": "力量训练",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "一般力量/器械训练",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["增肌", "塑形"]
+  },
+  {
+    "exercise_name": "高强度力量训练",
+    "aliases": ["大重量训练", "heavy lifting"],
+    "category": "力量训练",
+    "mets": 6.0,
+    "intensity": "vigorous",
+    "description": "大重量力量训练",
+    "calories_per_kg_per_hour": 6.0,
+    "suitable_for": ["增肌", "力量提升"]
+  },
+  {
+    "exercise_name": "深蹲",
+    "aliases": ["squat", "杠铃深蹲"],
+    "category": "力量训练",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "深蹲训练",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["下肢力量", "臀腿训练"]
+  },
+  {
+    "exercise_name": "硬拉",
+    "aliases": ["deadlift", "杠铃硬拉"],
+    "category": "力量训练",
+    "mets": 6.0,
+    "intensity": "vigorous",
+    "description": "硬拉训练",
+    "calories_per_kg_per_hour": 6.0,
+    "suitable_for": ["后链训练", "全身力量"]
+  },
+  {
+    "exercise_name": "卧推",
+    "aliases": ["bench press", "杠铃卧推"],
+    "category": "力量训练",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "卧推训练",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["胸肌训练", "上肢力量"]
+  },
+  {
+    "exercise_name": "引体向上",
+    "aliases": ["pull-up", "单杠"],
+    "category": "力量训练",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "引体向上/单杠训练",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["上肢力量", "背部训练"]
+  },
+  {
+    "exercise_name": "俯卧撑",
+    "aliases": ["push-up", "伏地挺身"],
+    "category": "力量训练",
+    "mets": 3.8,
+    "intensity": "moderate",
+    "description": "俯卧撑训练",
+    "calories_per_kg_per_hour": 3.8,
+    "suitable_for": ["上肢力量", "居家训练"]
+  },
+  {
+    "exercise_name": "哑铃训练",
+    "aliases": ["dumbbell exercise", "哑铃操"],
+    "category": "力量训练",
+    "mets": 4.5,
+    "intensity": "moderate",
+    "description": "哑铃综合训练",
+    "calories_per_kg_per_hour": 4.5,
+    "suitable_for": ["居家训练", "塑形"]
+  },
+  {
+    "exercise_name": "壶铃训练",
+    "aliases": ["kettlebell", "壶铃摆动"],
+    "category": "力量训练",
+    "mets": 6.0,
+    "intensity": "vigorous",
+    "description": "壶铃训练",
+    "calories_per_kg_per_hour": 6.0,
+    "suitable_for": ["功能训练", "全身爆发"]
+  },
+  {
+    "exercise_name": "弹力带训练",
+    "aliases": ["resistance band", "阻力带"],
+    "category": "力量训练",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "弹力带/阻力带训练",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["居家训练", "康复训练"]
+  },
+  {
+    "exercise_name": "有氧操",
+    "aliases": ["aerobics", "健身操", "有氧健身操"],
+    "category": "有氧运动",
+    "mets": 6.5,
+    "intensity": "moderate",
+    "description": "一般有氧健身操",
+    "calories_per_kg_per_hour": 6.5,
+    "suitable_for": ["减脂", "心肺训练"]
+  },
+  {
+    "exercise_name": "高强度间歇训练",
+    "aliases": ["HIIT", "高强度训练", "Tabata"],
+    "category": "有氧运动",
+    "mets": 9.0,
+    "intensity": "vigorous",
+    "description": "高强度间歇训练（HIIT）",
+    "calories_per_kg_per_hour": 9.0,
+    "suitable_for": ["高效减脂", "心肺爆发"]
+  },
+  {
+    "exercise_name": "CrossFit",
+    "aliases": ["混合体能训练", "综合体能"],
+    "category": "有氧运动",
+    "mets": 9.0,
+    "intensity": "vigorous",
+    "description": "CrossFit综合体能训练",
+    "calories_per_kg_per_hour": 9.0,
+    "suitable_for": ["全面体能", "功能训练"]
+  },
+  {
+    "exercise_name": "健身房训练",
+    "aliases": ["gym", "健身房", "综合训练"],
+    "category": "有氧运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "综合健身房训练",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["综合训练"]
+  },
+  {
+    "exercise_name": "椭圆机",
+    "aliases": ["椭圆仪", "elliptical"],
+    "category": "有氧运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "椭圆机训练",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["低冲击有氧", "关节友好"]
+  },
+  {
+    "exercise_name": "划船机",
+    "aliases": ["rowing machine", "室内划船"],
+    "category": "有氧运动",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "划船机训练",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["全身有氧", "背部训练"]
+  },
+  {
+    "exercise_name": "跳绳",
+    "aliases": ["jumping rope", "跳大绳"],
+    "category": "有氧运动",
+    "mets": 11.0,
+    "intensity": "vigorous",
+    "description": "跳绳运动",
+    "calories_per_kg_per_hour": 11.0,
+    "suitable_for": ["高效减脂", "心肺训练"]
+  },
+  {
+    "exercise_name": "开合跳",
+    "aliases": ["jumping jacks"],
+    "category": "有氧运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "开合跳运动",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["热身", "有氧训练"]
+  },
+  {
+    "exercise_name": "波比跳",
+    "aliases": ["burpee", "burpees"],
+    "category": "有氧运动",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "波比跳训练",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["全身爆发", "高强度减脂"]
+  },
+  {
+    "exercise_name": "跳舞",
+    "aliases": ["dancing", "舞蹈", "跳操"],
+    "category": "舞蹈类",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "一般舞蹈运动",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["休闲娱乐", "全身运动"]
+  },
+  {
+    "exercise_name": "广场舞",
+    "aliases": ["集体舞"],
+    "category": "舞蹈类",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "广场舞/集体舞",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["老年人", "社交运动"]
+  },
+  {
+    "exercise_name": "街舞",
+    "aliases": ["hip-hop", "hiphop", "嘻哈舞"],
+    "category": "舞蹈类",
+    "mets": 6.5,
+    "intensity": "vigorous",
+    "description": "街舞/嘻哈舞",
+    "calories_per_kg_per_hour": 6.5,
+    "suitable_for": ["年轻人", "全身协调"]
+  },
+  {
+    "exercise_name": "拉丁舞",
+    "aliases": ["salsa", "恰恰", "伦巴"],
+    "category": "舞蹈类",
+    "mets": 5.5,
+    "intensity": "moderate",
+    "description": "拉丁舞/国标舞",
+    "calories_per_kg_per_hour": 5.5,
+    "suitable_for": ["舞蹈爱好者", "社交"]
+  },
+  {
+    "exercise_name": "芭蕾",
+    "aliases": ["ballet", "芭蕾舞"],
+    "category": "舞蹈类",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "芭蕾舞练习",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["体态训练", "柔韧性"]
+  },
+  {
+    "exercise_name": "尊巴",
+    "aliases": ["zumba", "尊巴舞"],
+    "category": "舞蹈类",
+    "mets": 6.5,
+    "intensity": "moderate",
+    "description": "尊巴健身舞",
+    "calories_per_kg_per_hour": 6.5,
+    "suitable_for": ["减脂", "娱乐健身"]
+  },
+  {
+    "exercise_name": "武术",
+    "aliases": ["功夫", "martial arts", "套路"],
+    "category": "格斗与武术",
+    "mets": 5.5,
+    "intensity": "moderate",
+    "description": "传统武术套路",
+    "calories_per_kg_per_hour": 5.5,
+    "suitable_for": ["传统文化", "身体协调"]
+  },
+  {
+    "exercise_name": "跆拳道",
+    "aliases": ["taekwondo"],
+    "category": "格斗与武术",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "跆拳道训练",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["防身", "腿部训练"]
+  },
+  {
+    "exercise_name": "拳击",
+    "aliases": ["boxing", "打拳"],
+    "category": "格斗与武术",
+    "mets": 7.8,
+    "intensity": "vigorous",
+    "description": "拳击训练",
+    "calories_per_kg_per_hour": 7.8,
+    "suitable_for": ["减脂", "上肢力量", "减压"]
+  },
+  {
+    "exercise_name": "搏击操",
+    "aliases": ["kickboxing", "搏击健身"],
+    "category": "格斗与武术",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "搏击操/搏击健身",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["高强度减脂", "减压"]
+  },
+  {
+    "exercise_name": "柔道",
+    "aliases": ["judo"],
+    "category": "格斗与武术",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "柔道训练",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["防身", "全身力量"]
+  },
+  {
+    "exercise_name": "空手道",
+    "aliases": ["karate"],
+    "category": "格斗与武术",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "空手道训练",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["防身", "身体协调"]
+  },
+  {
+    "exercise_name": "击剑",
+    "aliases": ["fencing"],
+    "category": "格斗与武术",
+    "mets": 6.0,
+    "intensity": "moderate",
+    "description": "击剑运动",
+    "calories_per_kg_per_hour": 6.0,
+    "suitable_for": ["反应训练", "全身协调"]
+  },
+  {
+    "exercise_name": "综合格斗",
+    "aliases": ["MMA", "mixed martial arts"],
+    "category": "格斗与武术",
+    "mets": 9.0,
+    "intensity": "vigorous",
+    "description": "综合格斗训练",
+    "calories_per_kg_per_hour": 9.0,
+    "suitable_for": ["全面体能", "高强度"]
+  },
+  {
+    "exercise_name": "滑雪",
+    "aliases": ["skiing", "双板滑雪"],
+    "category": "冬季运动",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "高山滑雪",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["冬季户外", "全身运动"]
+  },
+  {
+    "exercise_name": "越野滑雪",
+    "aliases": ["cross-country skiing"],
+    "category": "冬季运动",
+    "mets": 9.0,
+    "intensity": "vigorous",
+    "description": "越野滑雪",
+    "calories_per_kg_per_hour": 9.0,
+    "suitable_for": ["耐力训练", "全身有氧"]
+  },
+  {
+    "exercise_name": "单板滑雪",
+    "aliases": ["snowboarding"],
+    "category": "冬季运动",
+    "mets": 5.3,
+    "intensity": "moderate",
+    "description": "单板滑雪",
+    "calories_per_kg_per_hour": 5.3,
+    "suitable_for": ["冬季户外", "平衡训练"]
+  },
+  {
+    "exercise_name": "滑冰",
+    "aliases": ["ice skating", "溜冰", "花样滑冰"],
+    "category": "冬季运动",
+    "mets": 5.5,
+    "intensity": "moderate",
+    "description": "休闲滑冰",
+    "calories_per_kg_per_hour": 5.5,
+    "suitable_for": ["冬季休闲", "平衡训练"]
+  },
+  {
+    "exercise_name": "速滑",
+    "aliases": ["speed skating", "短道速滑"],
+    "category": "冬季运动",
+    "mets": 9.0,
+    "intensity": "vigorous",
+    "description": "速度滑冰",
+    "calories_per_kg_per_hour": 9.0,
+    "suitable_for": ["竞技", "下肢爆发"]
+  },
+  {
+    "exercise_name": "冰球",
+    "aliases": ["ice hockey"],
+    "category": "冬季运动",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "冰球运动",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["团队竞技"]
+  },
+  {
+    "exercise_name": "滑板",
+    "aliases": ["skateboarding"],
+    "category": "极限运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "滑板运动",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["年轻人", "平衡训练"]
+  },
+  {
+    "exercise_name": "轮滑",
+    "aliases": ["rollerblading", "旱冰", "溜旱冰"],
+    "category": "极限运动",
+    "mets": 7.0,
+    "intensity": "vigorous",
+    "description": "轮滑运动",
+    "calories_per_kg_per_hour": 7.0,
+    "suitable_for": ["有氧运动", "平衡训练"]
+  },
+  {
+    "exercise_name": "攀岩",
+    "aliases": ["rock climbing", "室内攀岩"],
+    "category": "极限运动",
+    "mets": 7.5,
+    "intensity": "vigorous",
+    "description": "攀岩运动",
+    "calories_per_kg_per_hour": 7.5,
+    "suitable_for": ["上肢力量", "全身协调"]
+  },
+  {
+    "exercise_name": "蹦床",
+    "aliases": ["trampolining", "跳床"],
+    "category": "极限运动",
+    "mets": 3.5,
+    "intensity": "moderate",
+    "description": "蹦床运动",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["娱乐", "平衡训练"]
+  },
+  {
+    "exercise_name": "跑酷",
+    "aliases": ["parkour", "自由跑"],
+    "category": "极限运动",
+    "mets": 8.0,
+    "intensity": "vigorous",
+    "description": "跑酷/城市自由跑",
+    "calories_per_kg_per_hour": 8.0,
+    "suitable_for": ["全身协调", "敏捷性"]
+  },
+  {
+    "exercise_name": "仰卧起坐",
+    "aliases": ["sit-up", "卷腹"],
+    "category": "核心训练",
+    "mets": 3.8,
+    "intensity": "moderate",
+    "description": "仰卧起坐/卷腹训练",
+    "calories_per_kg_per_hour": 3.8,
+    "suitable_for": ["腹肌训练", "居家训练"]
+  },
+  {
+    "exercise_name": "平板支撑",
+    "aliases": ["plank", "棒式支撑"],
+    "category": "核心训练",
+    "mets": 3.0,
+    "intensity": "moderate",
+    "description": "平板支撑训练",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["核心稳定", "居家训练"]
+  },
+  {
+    "exercise_name": "公园活动",
+    "aliases": ["park", "公园散步", "公园健身"],
+    "category": "场景运动",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "公园散步/休闲活动",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["日常休闲", "老年人"]
+  },
+  {
+    "exercise_name": "室内运动",
+    "aliases": ["indoor", "居家运动", "室内活动"],
+    "category": "场景运动",
+    "mets": 4.0,
+    "intensity": "light",
+    "description": "一般室内运动",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["天气不好", "居家"]
+  },
+  {
+    "exercise_name": "室外运动",
+    "aliases": ["outdoor", "户外运动", "户外活动"],
+    "category": "场景运动",
+    "mets": 4.5,
+    "intensity": "moderate",
+    "description": "一般室外运动",
+    "calories_per_kg_per_hour": 4.5,
+    "suitable_for": ["户外爱好者"]
+  },
+  {
+    "exercise_name": "园艺",
+    "aliases": ["gardening", "种花", "种菜"],
+    "category": "生活活动",
+    "mets": 3.8,
+    "intensity": "light",
+    "description": "园艺/花园劳动",
+    "calories_per_kg_per_hour": 3.8,
+    "suitable_for": ["老年人", "休闲"]
+  },
+  {
+    "exercise_name": "做家务",
+    "aliases": ["housework", "打扫卫生", "大扫除"],
+    "category": "生活活动",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "一般家务劳动",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["日常活动"]
+  },
+  {
+    "exercise_name": "搬运重物",
+    "aliases": ["carrying heavy objects", "搬家"],
+    "category": "生活活动",
+    "mets": 7.5,
+    "intensity": "vigorous",
+    "description": "搬运重物",
+    "calories_per_kg_per_hour": 7.5,
+    "suitable_for": ["体力劳动"]
+  },
+  {
+    "exercise_name": "遛狗",
+    "aliases": ["walking the dog"],
+    "category": "生活活动",
+    "mets": 3.0,
+    "intensity": "light",
+    "description": "遛狗散步",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["日常活动", "宠物主"]
+  },
+  {
+    "exercise_name": "跳高",
+    "aliases": ["high jump"],
+    "category": "田径项目",
+    "mets": 6.0,
+    "intensity": "vigorous",
+    "description": "跳高训练",
+    "calories_per_kg_per_hour": 6.0,
+    "suitable_for": ["田径训练"]
+  },
+  {
+    "exercise_name": "跳远",
+    "aliases": ["long jump", "立定跳远"],
+    "category": "田径项目",
+    "mets": 6.0,
+    "intensity": "vigorous",
+    "description": "跳远训练",
+    "calories_per_kg_per_hour": 6.0,
+    "suitable_for": ["田径训练", "爆发力"]
+  },
+  {
+    "exercise_name": "铅球",
+    "aliases": ["shot put", "推铅球"],
+    "category": "田径项目",
+    "mets": 4.0,
+    "intensity": "moderate",
+    "description": "铅球运动",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["力量训练"]
+  },
+  {
+    "exercise_name": "标枪",
+    "aliases": ["javelin", "掷标枪"],
+    "category": "田径项目",
+    "mets": 4.0,
+    "intensity": "moderate",
+    "description": "标枪运动",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["田径训练"]
+  },
+  {
+    "exercise_name": "飞盘",
+    "aliases": ["frisbee", "极限飞盘"],
+    "category": "休闲运动",
+    "mets": 3.0,
+    "intensity": "light",
+    "description": "飞盘运动",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["休闲娱乐", "户外社交"]
+  },
+  {
+    "exercise_name": "射箭",
+    "aliases": ["archery"],
+    "category": "休闲运动",
+    "mets": 3.5,
+    "intensity": "light",
+    "description": "射箭运动",
+    "calories_per_kg_per_hour": 3.5,
+    "suitable_for": ["专注力", "上肢训练"]
+  },
+  {
+    "exercise_name": "钓鱼",
+    "aliases": ["fishing"],
+    "category": "休闲运动",
+    "mets": 2.0,
+    "intensity": "light",
+    "description": "钓鱼活动",
+    "calories_per_kg_per_hour": 2.0,
+    "suitable_for": ["休闲放松"]
+  },
+  {
+    "exercise_name": "骑马",
+    "aliases": ["horseback riding", "马术"],
+    "category": "休闲运动",
+    "mets": 4.0,
+    "intensity": "moderate",
+    "description": "骑马/马术",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["户外休闲", "平衡训练"]
+  },
+  {
+    "exercise_name": "体操",
+    "aliases": ["gymnastics", "竞技体操"],
+    "category": "体操类",
+    "mets": 4.0,
+    "intensity": "moderate",
+    "description": "一般体操训练",
+    "calories_per_kg_per_hour": 4.0,
+    "suitable_for": ["柔韧性", "协调性"]
+  },
+  {
+    "exercise_name": "竞技体操",
+    "aliases": ["artistic gymnastics"],
+    "category": "体操类",
+    "mets": 6.5,
+    "intensity": "vigorous",
+    "description": "竞技体操训练",
+    "calories_per_kg_per_hour": 6.5,
+    "suitable_for": ["竞技训练"]
+  },
+  {
+    "exercise_name": "蹦极",
+    "aliases": ["bungee jumping"],
+    "category": "极限运动",
+    "mets": 2.5,
+    "intensity": "light",
+    "description": "蹦极运动",
+    "calories_per_kg_per_hour": 2.5,
+    "suitable_for": ["极限体验"]
+  },
+  {
+    "exercise_name": "潜水",
+    "aliases": ["diving", "深潜", "水肺潜水"],
+    "category": "水上运动",
+    "mets": 3.0,
+    "intensity": "moderate",
+    "description": "水肺潜水",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["水上探险"]
+  },
+  {
+    "exercise_name": "浮潜",
+    "aliases": ["snorkeling"],
+    "category": "水上运动",
+    "mets": 5.0,
+    "intensity": "moderate",
+    "description": "浮潜运动",
+    "calories_per_kg_per_hour": 5.0,
+    "suitable_for": ["海上休闲"]
+  },
+  {
+    "exercise_name": "站立划桨",
+    "aliases": ["SUP", "stand up paddle"],
+    "category": "水上运动",
+    "mets": 3.8,
+    "intensity": "moderate",
+    "description": "站立式划桨冲浪",
+    "calories_per_kg_per_hour": 3.8,
+    "suitable_for": ["核心训练", "水上休闲"]
+  },
+  {
+    "exercise_name": "跳水",
+    "aliases": ["diving sport", "花样跳水"],
+    "category": "水上运动",
+    "mets": 3.0,
+    "intensity": "moderate",
+    "description": "跳水运动",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["竞技"]
+  },
+  {
+    "exercise_name": "赛艇",
+    "aliases": ["rowing", "划船比赛"],
+    "category": "水上运动",
+    "mets": 8.5,
+    "intensity": "vigorous",
+    "description": "赛艇运动",
+    "calories_per_kg_per_hour": 8.5,
+    "suitable_for": ["全身有氧", "竞技"]
+  },
+  {
+    "exercise_name": "帆船",
+    "aliases": ["sailing"],
+    "category": "水上运动",
+    "mets": 3.0,
+    "intensity": "light",
+    "description": "帆船运动",
+    "calories_per_kg_per_hour": 3.0,
+    "suitable_for": ["水上休闲"]
+  }
+]

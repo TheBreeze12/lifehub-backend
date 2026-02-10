@@ -24,6 +24,9 @@
 | **餐饮** | `/api/food/diet/{record_id}`   | DELETE | 删除饮食记录     |
 | **餐饮** | `/api/food/allergen/check`     | POST | 检测菜品过敏原     |
 | **餐饮** | `/api/food/allergen/categories`| GET  | 获取过敏原类别列表 |
+| **餐饮** | `/api/food/recommend`          | GET  | 个性化菜品推荐     |
+| **餐饮** | `/api/food/meal/before`        | POST | 上传餐前图片       |
+| **餐饮** | `/api/food/meal/after/{comparison_id}` | POST | 上传餐后图片并计算净摄入 |
 | **餐饮** | `/api/food/health`             | GET  | 食物服务健康检查   |
 | **用户** | `/api/user/register`           | POST | 用户注册           |
 | **用户** | `/api/user/login`              | POST | 用户登录（JWT）    |
@@ -32,13 +35,25 @@
 | **用户** | `/api/user/data`               | GET  | 用户登录（旧版）   |
 | **用户** | `/api/user/preferences`        | GET  | 获取用户偏好       |
 | **用户** | `/api/user/preferences`        | PUT  | 更新用户偏好       |
+| **用户** | `/api/user/data`               | DELETE | 一键遗忘 |
 | **运动** | `/api/trip/generate`           | POST | 生成运动计划       |
+| **运动** | `/api/trip/routes`             | POST | 生成帕累托最优路径 |
 | **运动** | `/api/trip/list`               | GET  | 获取运动计划列表   |
 | **运动** | `/api/trip/recent`             | GET  | 获取最近运动计划   |
 | **运动** | `/api/trip/home`               | GET  | 获取首页运动计划   |
 | **运动** | `/api/trip/{tripId}`           | GET  | 获取运动计划详情   |
+| **运动** | `/api/trip/plan-b/{plan_id}`   | GET  | 获取天气动态调整Plan B |
+| **运动** | `/api/trip/offline-package`    | POST | 生成离线运动包 |
+| **运动** | `/api/trip/offline-package/{package_id}` | GET | 下载离线运动包 |
 | **天气** | `/api/weather/by-address`      | GET  | 根据地址查询天气   |
 | **天气** | `/api/weather/by-plan`         | GET  | 根据计划ID查询天气 |
+| **运动记录** | `/api/exercise/record`   | POST | 新增运动记录       |
+| **运动记录** | `/api/exercise/records`  | GET  | 查询运动记录列表   |
+| **运动记录** | `/api/exercise/record/{record_id}` | GET | 查询运动记录详情 |
+| **运动记录** | `/api/exercise/record/{record_id}` | DELETE | 删除运动记录   |
+| **运动记录** | `/api/exercise/health`   | GET  | 运动记录服务健康检查 |
+| **统计** | `/api/stats/goal-progress`   | GET  | 健康目标达成率 |
+| **统计** | `/api/stats/exercise-frequency` | GET | 运动频率分析 |
 
 ---
 
@@ -130,7 +145,27 @@ Content-Type: application/json
     "carbs": 6.3,
     "recommendation": "这道菜营养均衡，蛋白质含量较高，适合减脂期食用。建议控制油量。",
     "allergens": ["egg"],
-    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
+    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。",
+    "cooking_method_comparisons": [
+      {
+        "method": "炒",
+        "calories": 150.0,
+        "fat": 8.2,
+        "description": "标准做法，油量适中"
+      },
+      {
+        "method": "蒸蛋",
+        "calories": 80.0,
+        "fat": 5.0,
+        "description": "无需额外油脂，热量更低"
+      },
+      {
+        "method": "煎",
+        "calories": 200.0,
+        "fat": 14.0,
+        "description": "煎制需更多油，热量较高"
+      }
+    ]
   }
 }
 ```
@@ -147,8 +182,13 @@ Content-Type: application/json
 | data.fat                 | float    | 脂肪（克/100g）                                   |
 | data.carbs               | float    | 碳水化合物（克/100g）                             |
 | data.recommendation      | string   | AI推荐理由                                        |
-| data.allergens           | string[] | AI推理的过敏原代码列表（Phase 7新增）             |
-| data.allergen_reasoning  | string   | 过敏原推理说明（Phase 7新增）                     |
+| data.allergens           | string[] | AI推理的过敏原代码列表             |
+| data.allergen_reasoning  | string   | 过敏原推理说明                     |
+| data.cooking_method_comparisons | array | 不同烹饪方式的热量/脂肪对比 |
+| data.cooking_method_comparisons[].method | string | 烹饪方式名称 |
+| data.cooking_method_comparisons[].calories | float | 该烹饪方式下的热量（千卡/100g） |
+| data.cooking_method_comparisons[].fat | float | 该烹饪方式下的脂肪（克/100g） |
+| data.cooking_method_comparisons[].description | string | 简要说明该烹饪方式特点 |
 
 **过敏原代码对照**（八大类）:
 | 代码      | 中文名称 | 英文名称   | 说明                           |
@@ -839,6 +879,100 @@ GET http://localhost:8000/api/food/allergen/categories
 
 ---
 
+### 9.5 个性化菜品推荐
+
+**接口地址**: `GET /api/food/recommend`
+
+**接口描述**: 基于用户健康目标、热量配额、历史偏好的个性化菜品推荐
+
+**推荐算法**:
+- 健康目标匹配（减脂→低热量高蛋白，增肌→高蛋白足够热量，控糖→低碳水，均衡→营养均衡）
+- 热量配额过滤（根据当日剩余热量推荐合适热量菜品）
+- 历史偏好排序（根据用户30天内饮食记录加分）
+- 过敏原过滤（自动排除含用户过敏原的菜品）
+- 多样性保证（今天已吃过的菜品降权）
+
+**请求参数**:
+| 参数名    | 类型   | 必填 | 说明                                                         |
+| --------- | ------ | ---- | ------------------------------------------------------------ |
+| user_id   | int    | 是   | 用户ID                                                       |
+| meal_type | string | 否   | 餐次：breakfast/lunch/dinner/snack，默认lunch，支持中文      |
+| limit     | int    | 否   | 返回推荐数量，默认5                                          |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/food/recommend?user_id=1&meal_type=lunch
+GET http://localhost:8000/api/food/recommend?user_id=1&meal_type=breakfast&limit=3
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "推荐成功",
+  "data": {
+    "user_id": 1,
+    "meal_type": "lunch",
+    "remaining_calories": 1224.06,
+    "daily_calorie_target": 1724.06,
+    "health_goal": "reduce_fat",
+    "health_goal_label": "减脂",
+    "recommendations": [
+      {
+        "food_name": "清蒸鲈鱼",
+        "calories": 105.0,
+        "protein": 19.5,
+        "fat": 3.0,
+        "carbs": 0.5,
+        "score": 92.5,
+        "reason": "热量仅105千卡，适合减脂；蛋白质19.5g，有助于维持肌肉；低脂肪，减少脂肪摄入；在您的剩余热量配额（1224kcal）内。",
+        "tags": ["高蛋白", "低脂肪", "低热量"]
+      },
+      {
+        "food_name": "鸡胸肉沙拉",
+        "calories": 120.0,
+        "protein": 22.0,
+        "fat": 3.0,
+        "carbs": 4.0,
+        "score": 88.0,
+        "reason": "高蛋白低脂肪，适合减脂目标。",
+        "tags": ["高蛋白", "低脂肪", "低碳水"]
+      }
+    ]
+  }
+}
+```
+
+**字段说明**:
+| 字段名                           | 类型   | 说明                         |
+| -------------------------------- | ------ | ---------------------------- |
+| data.user_id                     | int    | 用户ID                       |
+| data.meal_type                   | string | 餐次（英文）                 |
+| data.remaining_calories          | float  | 当日剩余热量配额（kcal）     |
+| data.daily_calorie_target        | float  | 每日热量目标（kcal）         |
+| data.health_goal                 | string | 健康目标代码                 |
+| data.health_goal_label           | string | 健康目标中文标签             |
+| data.recommendations             | array  | 推荐菜品列表                 |
+| data.recommendations[].food_name | string | 菜品名称                     |
+| data.recommendations[].calories  | float  | 热量（千卡/100g）            |
+| data.recommendations[].protein   | float  | 蛋白质（克/100g）            |
+| data.recommendations[].fat       | float  | 脂肪（克/100g）              |
+| data.recommendations[].carbs     | float  | 碳水化合物（克/100g）        |
+| data.recommendations[].score     | float  | 综合推荐评分（0-100）        |
+| data.recommendations[].reason    | string | 推荐理由                     |
+| data.recommendations[].tags      | array  | 标签（如高蛋白、低脂肪等）   |
+
+**错误响应**:
+- 用户不存在（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，user_id: 9999"
+}
+```
+- 缺少user_id参数（HTTP 422）: 验证错误详情
+
+---
+
 ### 10. 获取用户偏好
 
 **接口地址**: `GET /api/user/preferences`
@@ -1084,11 +1218,11 @@ GET http://localhost:8000/api/user/data?nickname=健康达人&password=securepas
 
 ---
 
-### 12. 生成运动计划 ⭐
+### 12. 生成运动计划 
 
 **接口地址**: `POST /api/trip/generate`
 
-**接口描述**: 根据用户查询与偏好，AI生成餐后运动计划（基于“餐后30–60分钟”原则，地点为具体可运动的场所）。
+**接口描述**: 根据用户查询与偏好，AI生成餐后运动计划（基于"餐后30–60分钟"原则，地点为具体可运动的场所）。热量消耗基于METs公式精准计算：`消耗(kcal) = METs × 体重(kg) × 时间(h)`（Phase 19新增）。
 
 **请求头**:
 ```
@@ -1137,8 +1271,10 @@ Content-Type: application/json
         "placeName": "北京中央公园健身步道",
         "placeType": "walking",
         "duration": 30,
-        "cost": 150,
-        "notes": "餐后散步，建议慢走，注意补水"
+        "cost": 122.5,
+        "notes": "餐后散步，建议慢走，注意补水",
+        "metsValue": 3.5,
+        "calculationBasis": "METs=3.5 × 70kg × 0.50h"
       },
       {
         "dayIndex": 1,
@@ -1146,39 +1282,429 @@ Content-Type: application/json
         "placeName": "北京滨江健身步道",
         "placeType": "running",
         "duration": 20,
-        "cost": 160,
-        "notes": "轻慢跑，控制强度，避免过饱运动"
-      },
+        "cost": 186.7,
+        "notes": "轻慢跑，控制强度，避免过饱运动",
+        "metsValue": 8.0,
+        "calculationBasis": "METs=8.0 × 70kg × 0.33h"
+      }
     ]
   }
 }
 ```
 
 **响应字段说明**:
-| 字段                   | 类型         | 说明                                                               |
-| ---------------------- | ------------ | ------------------------------------------------------------------ |
-| code                   | int          | 状态码，200表示成功                                                |
-| message                | string       | 响应消息                                                           |
-| data                   | object       | 运动计划数据                                                       |
-| data.tripId            | int          | 计划ID                                                             |
-| data.title             | string       | 计划标题                                                           |
-| data.destination       | string\|null | 运动区域/起点（具体地点）                                          |
-| data.startDate         | string       | 开始日期（YYYY-MM-DD）                                             |
-| data.endDate           | string       | 结束日期（YYYY-MM-DD）                                             |
-| data.items             | array        | 行程节点列表                                                       |
-| data.items[].dayIndex  | int          | 第几天（从1开始）                                                  |
-| data.items[].startTime | string\|null | 开始时间（HH:mm，依据提示词或当前时间，遵循餐后30–60分钟动态生成） |
-| data.items[].placeName | string       | 运动地点名称（必须为具体地点）                                     |
-| data.items[].placeType | string\|null | 运动类型/场景：walking/running/cycling/park/gym/indoor/outdoor     |
-| data.items[].duration  | int\|null    | 预计时长（分钟）                                                   |
-| data.items[].cost      | int\|null    | 预计消耗卡路里（kcal）                                             |
-| data.items[].notes     | string\|null | 运动建议、注意事项                                                 |
+| 字段                          | 类型         | 说明                                                               |
+| ----------------------------- | ------------ | ------------------------------------------------------------------ |
+| code                          | int          | 状态码，200表示成功                                                |
+| message                       | string       | 响应消息                                                           |
+| data                          | object       | 运动计划数据                                                       |
+| data.tripId                   | int          | 计划ID                                                             |
+| data.title                    | string       | 计划标题                                                           |
+| data.destination              | string\|null | 运动区域/起点（具体地点）                                          |
+| data.startDate                | string       | 开始日期（YYYY-MM-DD）                                             |
+| data.endDate                  | string       | 结束日期（YYYY-MM-DD）                                             |
+| data.items                    | array        | 行程节点列表                                                       |
+| data.items[].dayIndex         | int          | 第几天（从1开始）                                                  |
+| data.items[].startTime        | string\|null | 开始时间（HH:mm，依据提示词或当前时间，遵循餐后30–60分钟动态生成） |
+| data.items[].placeName        | string       | 运动地点名称（必须为具体地点）                                     |
+| data.items[].placeType        | string\|null | 运动类型/场景：walking/running/cycling/park/gym/indoor/outdoor     |
+| data.items[].duration         | int\|null    | 预计时长（分钟）                                                   |
+| data.items[].cost             | float\|null  | 预计消耗卡路里（kcal），基于METs公式精准计算                       |
+| data.items[].notes            | string\|null | 运动建议、注意事项（包含METs计算依据）                             |
+| data.items[].metsValue        | float\|null  | METs值（Phase 19新增）                                             |
+| data.items[].calculationBasis | string\|null | 热量计算依据公式（Phase 19新增）                                   |
 
 **错误响应**:
 - 请求参数错误（HTTP 400）:
 ```json
 {
   "detail": "请求参数错误: ..."
+}
+```
+
+---
+
+### 12.1 生成帕累托最优路径 ⭐ (Phase 22 新增)
+
+**接口地址**: `POST /api/trip/routes`
+
+**接口描述**: 基于NSGA-II多目标优化算法，生成2-3条帕累托最优运动路径。同时优化三个目标：最短时间、最大热量消耗、最佳绿化评分。
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名           | 类型   | 必填 | 说明                                                        |
+| ---------------- | ------ | ---- | ----------------------------------------------------------- |
+| start_lat        | float  | 是   | 起点纬度，范围[-90, 90]                                     |
+| start_lng        | float  | 是   | 起点经度，范围[-180, 180]                                   |
+| target_calories  | float  | 是   | 目标热量消耗（kcal），>0                                    |
+| max_time_minutes | int    | 否   | 最大运动时间（分钟），默认60，范围[1, 240]                  |
+| exercise_type    | string | 否   | 运动类型：walking/running/cycling/jogging/hiking，默认walking |
+| weight_kg        | float  | 否   | 用户体重（kg），默认70，范围(0, 500]                        |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/trip/routes
+Content-Type: application/json
+
+{
+  "start_lat": 39.9042,
+  "start_lng": 116.4074,
+  "target_calories": 300,
+  "max_time_minutes": 60,
+  "exercise_type": "walking",
+  "weight_kg": 70.0
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "帕累托最优路径生成成功",
+  "data": {
+    "routes": [
+      {
+        "route_id": 1,
+        "route_name": "最短时间",
+        "time_minutes": 25.5,
+        "calories_burn": 150.0,
+        "greenery_score": 45.0,
+        "distance_meters": 2100,
+        "waypoints": [
+          {"lat": 39.9042, "lng": 116.4074, "order": 0, "type": "start"},
+          {"lat": 39.9052, "lng": 116.4084, "order": 1, "type": "waypoint"},
+          {"lat": 39.9062, "lng": 116.4074, "order": 2, "type": "waypoint"},
+          {"lat": 39.9042, "lng": 116.4074, "order": 3, "type": "end"}
+        ],
+        "exercise_type": "walking",
+        "intensity": 0.85
+      },
+      {
+        "route_id": 2,
+        "route_name": "最大消耗",
+        "time_minutes": 55.0,
+        "calories_burn": 280.0,
+        "greenery_score": 60.0,
+        "distance_meters": 4500,
+        "waypoints": [...],
+        "exercise_type": "walking",
+        "intensity": 0.9
+      },
+      {
+        "route_id": 3,
+        "route_name": "最佳绿化",
+        "time_minutes": 45.0,
+        "calories_burn": 200.0,
+        "greenery_score": 85.0,
+        "distance_meters": 3800,
+        "waypoints": [...],
+        "exercise_type": "walking",
+        "intensity": 0.7
+      }
+    ],
+    "start_point": {"lat": 39.9042, "lng": 116.4074, "order": 0, "type": "start"},
+    "target_calories": 300,
+    "max_time_minutes": 60,
+    "exercise_type": "walking",
+    "weight_kg": 70.0,
+    "n_routes": 3
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                          | 类型   | 说明                                           |
+| ----------------------------- | ------ | ---------------------------------------------- |
+| code                          | int    | 状态码，200表示成功                            |
+| message                       | string | 响应消息                                       |
+| data                          | object | 路径数据                                       |
+| data.routes                   | array  | 帕累托最优路径列表（2-3条）                    |
+| data.routes[].route_id        | int    | 路径ID                                         |
+| data.routes[].route_name      | string | 路径名称（最短时间/最大消耗/最佳绿化）         |
+| data.routes[].time_minutes    | float  | 预计时间（分钟）                               |
+| data.routes[].calories_burn   | float  | 热量消耗（kcal）                               |
+| data.routes[].greenery_score  | float  | 绿化评分（0-100）                              |
+| data.routes[].distance_meters | float  | 距离（米）                                     |
+| data.routes[].waypoints       | array  | 路径点列表                                     |
+| data.routes[].waypoints[].lat | float  | 路径点纬度                                     |
+| data.routes[].waypoints[].lng | float  | 路径点经度                                     |
+| data.routes[].waypoints[].order | int  | 路径点顺序                                     |
+| data.routes[].waypoints[].type | string | 路径点类型：start/waypoint/end                |
+| data.routes[].exercise_type   | string | 运动类型                                       |
+| data.routes[].intensity       | float  | 运动强度（0-1）                                |
+| data.start_point              | object | 起点坐标                                       |
+| data.target_calories          | float  | 目标热量消耗                                   |
+| data.max_time_minutes         | int    | 最大运动时间                                   |
+| data.exercise_type            | string | 运动类型                                       |
+| data.weight_kg                | float  | 用户体重                                       |
+| data.n_routes                 | int    | 返回的路径数量                                 |
+
+**错误响应**:
+- 请求参数错误（HTTP 422）:
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "target_calories"],
+      "msg": "field required",
+      "type": "value_error.missing"
+    }
+  ]
+}
+```
+- 坐标无效（HTTP 422）:
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "start_lat"],
+      "msg": "ensure this value is less than or equal to 90",
+      "type": "value_error.number.not_le"
+    }
+  ]
+}
+```
+
+---
+
+### 12.2 获取天气动态调整 Plan B ⭐ (Phase 32 新增)
+
+**接口地址**: `GET /api/trip/plan-b/{plan_id}`
+
+**接口描述**: 根据运动计划所在位置的当前天气，评估是否适合户外运动。如果天气恶劣（中雨、大雪、雷暴、极端温度、大风等），自动生成室内替代运动方案（Plan B），保持热量消耗目标接近原计划。
+
+**路径参数**:
+| 参数名  | 类型 | 必填 | 说明       |
+| ------- | ---- | ---- | ---------- |
+| plan_id | int  | 是   | 运动计划ID |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/trip/plan-b/1
+```
+
+**响应示例（恶劣天气，需要Plan B）**:
+```json
+{
+  "code": 200,
+  "message": "已生成室内替代方案",
+  "data": {
+    "plan_id": 1,
+    "weather": {
+      "is_bad_weather": true,
+      "severity": "moderate",
+      "description": "中雨",
+      "temperature": 18.0,
+      "windspeed": 15.0,
+      "weathercode": 63,
+      "recommendation": "天气不佳，建议改为室内运动",
+      "warnings": null
+    },
+    "need_plan_b": true,
+    "original_calories": 280.0,
+    "alternatives": [
+      {
+        "exercise_name": "力量训练",
+        "exercise_type": "weight_training",
+        "duration": 48,
+        "calories": 280.0,
+        "is_indoor": true,
+        "description": "哑铃或自重力量训练",
+        "mets_value": 5.0
+      },
+      {
+        "exercise_name": "有氧健身操",
+        "exercise_type": "aerobics",
+        "duration": 10,
+        "calories": 75.8,
+        "is_indoor": true,
+        "description": "跟随视频进行有氧健身操训练",
+        "mets_value": 6.5
+      }
+    ],
+    "plan_b_total_calories": 355.8,
+    "reason": "当前天气：中雨，天气不佳，建议改为室内运动"
+  }
+}
+```
+
+**响应示例（天气良好，无需Plan B）**:
+```json
+{
+  "code": 200,
+  "message": "天气良好，无需替代方案",
+  "data": {
+    "plan_id": 1,
+    "weather": {
+      "is_bad_weather": false,
+      "severity": "good",
+      "description": "晴天",
+      "temperature": 22.0,
+      "windspeed": 5.0,
+      "weathercode": 0,
+      "recommendation": "天气良好，适合户外运动",
+      "warnings": null
+    },
+    "need_plan_b": false,
+    "original_calories": 280.0,
+    "alternatives": [],
+    "plan_b_total_calories": 0.0,
+    "reason": "当前天气适合户外运动，无需替代方案"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                  | 类型    | 说明                                    |
+| ------------------------------------- | ------- | --------------------------------------- |
+| code                                  | int     | 状态码，200表示成功                     |
+| message                               | string  | 响应消息                                |
+| data.plan_id                          | int     | 原运动计划ID                            |
+| data.weather                          | object  | 天气评估结果                            |
+| data.weather.is_bad_weather           | bool    | 是否恶劣天气                            |
+| data.weather.severity                 | string  | 严重程度：good/mild/moderate/severe     |
+| data.weather.description              | string  | 天气描述（中文）                        |
+| data.weather.temperature              | float   | 当前温度（℃）                           |
+| data.weather.windspeed                | float   | 风速（km/h）                            |
+| data.weather.weathercode              | int     | WMO天气代码                             |
+| data.weather.recommendation           | string  | 建议                                    |
+| data.weather.warnings                 | array   | 警告列表（极端温度/大风等）             |
+| data.need_plan_b                      | bool    | 是否需要Plan B                          |
+| data.original_calories                | float   | 原计划总热量（kcal）                    |
+| data.alternatives                     | array   | 室内替代方案列表                        |
+| data.alternatives[].exercise_name     | string  | 运动名称                                |
+| data.alternatives[].exercise_type     | string  | 运动类型代码                            |
+| data.alternatives[].duration          | int     | 建议时长（分钟）                        |
+| data.alternatives[].calories          | float   | 预计消耗热量（kcal）                    |
+| data.alternatives[].is_indoor         | bool    | 是否室内运动                            |
+| data.alternatives[].description       | string  | 运动描述                                |
+| data.alternatives[].mets_value        | float   | METs值                                  |
+| data.plan_b_total_calories            | float   | Plan B总热量（kcal）                    |
+| data.reason                           | string  | 生成Plan B的原因                        |
+
+**错误响应**:
+- 计划不存在（HTTP 404）:
+```json
+{
+  "detail": "运动计划不存在，plan_id: 999"
+}
+```
+
+---
+
+### 12.3 生成离线运动包 ⭐ (Phase 46 新增)
+
+**接口地址**: `POST /api/trip/offline-package`
+
+**接口描述**: 根据运动计划ID，打包运动方案文本、POI数据、地图瓦片元数据为ZIP离线包。支持同一计划多次生成（版本递增）。
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名  | 类型 | 必填 | 说明                 |
+| ------- | ---- | ---- | -------------------- |
+| plan_id | int  | 是   | 运动计划ID，必须 > 0 |
+
+**请求示例**:
+```bash
+curl -X POST http://localhost:8000/api/trip/offline-package \
+  -H 'Content-Type: application/json' \
+  -d '{"plan_id": 1}'
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "离线包生成成功",
+  "data": {
+    "plan_id": 1,
+    "package_id": "pkg_1_1_abc12345",
+    "version": 1,
+    "file_size": 2048,
+    "created_at": "2026-02-07T15:00:00",
+    "tile_bounds": {
+      "min_lat": 39.8942,
+      "max_lat": 40.0029,
+      "min_lng": 116.3790,
+      "max_lng": 116.4174
+    }
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                    | 类型        | 说明                           |
+| ----------------------- | ----------- | ------------------------------ |
+| code                    | int         | 状态码，200表示成功            |
+| message                 | string      | 响应消息                       |
+| data.plan_id            | int         | 运动计划ID                     |
+| data.package_id         | string      | 离线包唯一标识                 |
+| data.version            | int         | 离线包版本号（同一计划递增）   |
+| data.file_size          | int         | 文件大小（字节）               |
+| data.created_at         | string      | 创建时间（ISO格式）            |
+| data.tile_bounds        | object/null | 地图瓦片覆盖范围               |
+| data.tile_bounds.min_lat| float       | 最小纬度                       |
+| data.tile_bounds.max_lat| float       | 最大纬度                       |
+| data.tile_bounds.min_lng| float       | 最小经度                       |
+| data.tile_bounds.max_lng| float       | 最大经度                       |
+
+**离线包ZIP内容**:
+| 文件名          | 说明                                     |
+| --------------- | ---------------------------------------- |
+| metadata.json   | 包元数据（package_id、版本、创建时间等） |
+| plan.json       | 运动方案文本（标题、项目、总时长等）     |
+| pois.json       | POI数据（名称、类型、坐标等）            |
+| tiles_meta.json | 地图瓦片元数据（边界、缩放级别、数量）   |
+
+**错误响应**:
+- 计划不存在（HTTP 404）:
+```json
+{
+  "detail": "运动计划不存在，plan_id: 999"
+}
+```
+- 无效plan_id（HTTP 422）:
+```json
+{
+  "detail": [{"msg": "Input should be greater than 0"}]
+}
+```
+
+---
+
+### 12.4 下载离线运动包 ⭐ (Phase 46 新增)
+
+**接口地址**: `GET /api/trip/offline-package/{package_id}`
+
+**接口描述**: 根据离线包ID下载对应的ZIP文件。
+
+**路径参数**:
+| 参数名     | 类型   | 必填 | 说明         |
+| ---------- | ------ | ---- | ------------ |
+| package_id | string | 是   | 离线包唯一ID |
+
+**请求示例**:
+```bash
+curl -O http://localhost:8000/api/trip/offline-package/pkg_1_1_abc12345
+```
+
+**响应**: 直接返回ZIP文件流
+- Content-Type: `application/zip`
+- Content-Disposition: `attachment; filename="pkg_1_1_abc12345.zip"`
+
+**错误响应**:
+- 离线包不存在（HTTP 404）:
+```json
+{
+  "detail": "离线包不存在或已过期，package_id: pkg_xxx"
 }
 ```
 
@@ -1712,7 +2238,1119 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ---
 
+### 9.5 上传餐前图片 ⭐
+
+**接口地址**: `POST /api/food/meal/before`
+
+**接口描述**: 上传餐前食物图片，AI自动识别菜品并估算份量和热量，创建对比记录
+
+**请求头**:
+```
+Content-Type: multipart/form-data
+```
+
+**请求参数**:
+| 参数名   | 类型   | 必填 | 说明                               |
+| -------- | ------ | ---- | ---------------------------------- |
+| image    | file   | 是   | 餐前食物图片（支持jpg, jpeg, png） |
+| user_id  | int    | 是   | 用户ID                             |
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/food/meal/before
+Content-Type: multipart/form-data
+
+# 使用 curl
+curl -X POST http://localhost:8000/api/food/meal/before \
+  -F "image=@before_meal.jpg" \
+  -F "user_id=1"
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "餐前图片上传成功",
+  "data": {
+    "comparison_id": 1,
+    "before_image_url": "/uploads/meal/before_1_abc123.jpg",
+    "before_features": {
+      "dishes": [
+        {
+          "name": "红烧肉",
+          "estimated_weight": 200,
+          "estimated_calories": 500.0,
+          "estimated_protein": 25.0,
+          "estimated_fat": 35.0,
+          "estimated_carbs": 10.0
+        },
+        {
+          "name": "清炒时蔬",
+          "estimated_weight": 150,
+          "estimated_calories": 80.0,
+          "estimated_protein": 3.0,
+          "estimated_fat": 5.0,
+          "estimated_carbs": 8.0
+        }
+      ],
+      "total_estimated_calories": 580.0,
+      "total_estimated_protein": 28.0,
+      "total_estimated_fat": 40.0,
+      "total_estimated_carbs": 18.0
+    },
+    "status": "pending_after"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                      | 类型    | 说明                              |
+| ----------------------------------------- | ------- | --------------------------------- |
+| code                                      | int     | 状态码，200表示成功               |
+| message                                   | string  | 响应消息                          |
+| data.comparison_id                        | int     | 对比记录ID（用于后续餐后上传）    |
+| data.before_image_url                     | string  | 餐前图片保存路径                  |
+| data.before_features                      | object  | AI识别的菜品特征                  |
+| data.before_features.dishes               | array   | 识别到的菜品列表                  |
+| data.before_features.dishes[].name        | string  | 菜品名称                          |
+| data.before_features.dishes[].estimated_weight | int | 估算重量（g）                    |
+| data.before_features.dishes[].estimated_calories | float | 估算热量（kcal）              |
+| data.before_features.dishes[].estimated_protein | float | 估算蛋白质（g）               |
+| data.before_features.dishes[].estimated_fat | float | 估算脂肪（g）                   |
+| data.before_features.dishes[].estimated_carbs | float | 估算碳水化合物（g）            |
+| data.before_features.total_estimated_calories | float | 总估算热量（kcal）            |
+| data.before_features.total_estimated_protein | float | 总估算蛋白质（g）              |
+| data.before_features.total_estimated_fat  | float   | 总估算脂肪（g）                   |
+| data.before_features.total_estimated_carbs | float  | 总估算碳水化合物（g）             |
+| data.status                               | string  | 记录状态（pending_after表示等待餐后上传） |
+
+**错误响应**:
+
+*文件类型错误*（HTTP 400）:
+```json
+{
+  "detail": "请上传图片文件（支持jpg, jpeg, png格式）"
+}
+```
+
+*用户不存在*（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，user_id: 123"
+}
+```
+
+---
+
+### 9.6 上传餐后图片并计算净摄入 ⭐
+
+**接口地址**: `POST /api/food/meal/after/{comparison_id}`
+
+**接口描述**: 上传餐后食物图片，AI对比餐前餐后图片，计算剩余比例和净摄入热量
+
+**Phase 12实现**: 餐后图片上传与对比计算
+
+**路径参数**:
+| 参数名        | 类型 | 必填 | 说明                           |
+| ------------- | ---- | ---- | ------------------------------ |
+| comparison_id | int  | 是   | 餐前上传时返回的对比记录ID     |
+
+**请求头**:
+```
+Content-Type: multipart/form-data
+```
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                                 |
+| ------ | ---- | ---- | ------------------------------------ |
+| image  | file | 是   | 餐后食物图片（支持jpg, jpeg, png格式）|
+
+**请求示例**:
+```bash
+curl -X POST http://localhost:8000/api/food/meal/after/1 \
+  -F "image=@after_meal.jpg"
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "餐后图片上传成功，对比完成",
+  "data": {
+    "comparison_id": 1,
+    "before_image_url": "/uploads/meal/before_1_abc123.jpg",
+    "after_image_url": "/uploads/meal/after_1_1_def456.jpg",
+    "consumption_ratio": 0.75,
+    "original_calories": 580.0,
+    "net_calories": 435.0,
+    "original_protein": 28.0,
+    "original_fat": 40.0,
+    "original_carbs": 18.0,
+    "net_protein": 21.0,
+    "net_fat": 30.0,
+    "net_carbs": 13.5,
+    "comparison_analysis": "您吃掉了约75%的食物，红烧肉剩余约1/4，蔬菜全部吃完。",
+    "status": "completed"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                     | 类型   | 说明                                    |
+| ------------------------ | ------ | --------------------------------------- |
+| code                     | int    | 状态码，200表示成功                     |
+| message                  | string | 响应消息                                |
+| data.comparison_id       | int    | 对比记录ID                              |
+| data.before_image_url    | string | 餐前图片路径                            |
+| data.after_image_url     | string | 餐后图片路径                            |
+| data.consumption_ratio   | float  | 消耗比例（0-1，1表示全部吃完）          |
+| data.original_calories   | float  | 原始估算热量（kcal）                    |
+| data.net_calories        | float  | 净摄入热量 = 原始热量 × 消耗比例        |
+| data.original_protein    | float  | 原始蛋白质（g）                         |
+| data.original_fat        | float  | 原始脂肪（g）                           |
+| data.original_carbs      | float  | 原始碳水化合物（g）                     |
+| data.net_protein         | float  | 净摄入蛋白质（g）                       |
+| data.net_fat             | float  | 净摄入脂肪（g）                         |
+| data.net_carbs           | float  | 净摄入碳水化合物（g）                   |
+| data.comparison_analysis | string | AI对比分析说明                          |
+| data.status              | string | 记录状态（completed表示对比完成）       |
+
+**计算公式**:
+- 消耗比例 = 1 - 剩余比例
+- 净摄入热量 = 原始热量 × 消耗比例
+- 净摄入蛋白质 = 原始蛋白质 × 消耗比例
+- 净摄入脂肪 = 原始脂肪 × 消耗比例
+- 净摄入碳水化合物 = 原始碳水化合物 × 消耗比例
+
+**错误响应**:
+
+*文件类型错误*（HTTP 400）:
+```json
+{
+  "detail": "请上传图片文件（支持jpg, jpeg, png格式）"
+}
+```
+
+*对比记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "对比记录不存在，comparison_id: 99999"
+}
+```
+
+*重复上传*（HTTP 400）:
+```json
+{
+  "detail": "该对比记录已完成，请勿重复上传"
+}
+```
+
+*状态异常*（HTTP 400）:
+```json
+{
+  "detail": "对比记录状态异常: pending_before"
+}
+```
+
+---
+
+### 17. 每日热量统计 ⭐
+
+**接口地址**: `GET /api/stats/calories/daily`
+
+**接口描述**: 获取指定用户在指定日期的热量摄入和消耗统计。Phase 26新增饮食-运动数据联动：关联运动记录（ExerciseRecord），区分计划消耗与实际消耗，计算热量缺口和目标达成率。
+
+**请求参数**:
+| 参数名 | 类型   | 必填 | 说明                     |
+| ------ | ------ | ---- | ------------------------ |
+| userId | int    | 是   | 用户ID，>0               |
+| date   | string | 是   | 统计日期（YYYY-MM-DD格式）|
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/calories/daily?userId=1&date=2026-02-04
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "date": "2026-02-04",
+    "user_id": 1,
+    "intake_calories": 1800.0,
+    "meal_count": 3,
+    "burn_calories": 450.0,
+    "exercise_count": 2,
+    "exercise_duration": 60,
+    "planned_burn_calories": 500.0,
+    "actual_burn_calories": 450.0,
+    "actual_exercise_count": 2,
+    "actual_exercise_duration": 55,
+    "net_calories": 1350.0,
+    "calorie_deficit": 1350.0,
+    "goal_achievement_rate": 90.0,
+    "meal_breakdown": {
+      "breakfast": 400.0,
+      "lunch": 700.0,
+      "dinner": 600.0,
+      "snack": 100.0
+    }
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                            | 类型        | 说明                                                                 |
+| ------------------------------- | ----------- | -------------------------------------------------------------------- |
+| code                            | int         | 状态码，200表示成功                                                  |
+| message                         | string      | 响应消息                                                             |
+| data.date                       | string      | 统计日期                                                             |
+| data.user_id                    | int         | 用户ID                                                               |
+| data.intake_calories            | float       | 摄入热量（kcal，来自饮食记录）                                       |
+| data.meal_count                 | int         | 餐次数量                                                             |
+| data.burn_calories              | float       | 有效消耗热量（kcal，有运动记录时用实际值，否则用计划值）             |
+| data.exercise_count             | int         | 运动计划项目数量                                                     |
+| data.exercise_duration          | int         | 运动计划总时长（分钟）                                               |
+| data.planned_burn_calories      | float       | 计划消耗热量（kcal，来自运动计划TripItem）⭐Phase 26新增             |
+| data.actual_burn_calories       | float       | 实际消耗热量（kcal，来自运动记录ExerciseRecord）⭐Phase 26新增       |
+| data.actual_exercise_count      | int         | 实际运动记录数量 ⭐Phase 26新增                                      |
+| data.actual_exercise_duration   | int         | 实际运动总时长（分钟）⭐Phase 26新增                                 |
+| data.net_calories               | float       | 净热量（摄入-有效消耗）                                              |
+| data.calorie_deficit            | float       | 热量缺口（摄入-有效消耗，正值=盈余，负值=亏缺）⭐Phase 26新增       |
+| data.goal_achievement_rate      | float\|null | 目标达成率（%），实际消耗/计划消耗×100，无计划时为null ⭐Phase 26新增 |
+| data.meal_breakdown             | object      | 餐次分类统计（早餐/午餐/晚餐/加餐）                                 |
+
+**burn_calories 计算逻辑**（Phase 26）:
+- 当日有运动记录（ExerciseRecord）时：`burn_calories = actual_burn_calories`
+- 当日无运动记录但有运动计划时：`burn_calories = planned_burn_calories`
+- 都没有时：`burn_calories = 0`
+
+**错误响应**:
+- 日期格式错误（HTTP 400）:
+```json
+{
+  "detail": "日期格式错误，请使用 YYYY-MM-DD 格式，收到: invalid-date"
+}
+```
+
+---
+
+### 18. 每周热量统计 ⭐
+
+**接口地址**: `GET /api/stats/calories/weekly`
+
+**接口描述**: 获取指定用户在指定周的热量摄入和消耗统计
+
+**请求参数**:
+| 参数名     | 类型   | 必填 | 说明                         |
+| ---------- | ------ | ---- | ---------------------------- |
+| userId     | int    | 是   | 用户ID，>0                   |
+| week_start | string | 是   | 周起始日期（YYYY-MM-DD格式） |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/calories/weekly?userId=1&week_start=2026-02-03
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "week_start": "2026-02-03",
+    "week_end": "2026-02-09",
+    "user_id": 1,
+    "total_intake": 12600.0,
+    "total_burn": 3500.0,
+    "total_net": 9100.0,
+    "avg_intake": 1800.0,
+    "avg_burn": 500.0,
+    "avg_net": 1300.0,
+    "total_meals": 21,
+    "total_exercises": 14,
+    "active_days": 7,
+    "daily_breakdown": [
+      {
+        "date": "2026-02-03",
+        "intake_calories": 1800.0,
+        "burn_calories": 500.0,
+        "net_calories": 1300.0
+      }
+    ]
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                              | 类型   | 说明                   |
+| --------------------------------- | ------ | ---------------------- |
+| code                              | int    | 状态码，200表示成功    |
+| message                           | string | 响应消息               |
+| data.week_start                   | string | 周起始日期             |
+| data.week_end                     | string | 周结束日期             |
+| data.user_id                      | int    | 用户ID                 |
+| data.total_intake                 | float  | 周总摄入热量（kcal）   |
+| data.total_burn                   | float  | 周总消耗热量（kcal）   |
+| data.total_net                    | float  | 周净热量               |
+| data.avg_intake                   | float  | 日均摄入热量（kcal）   |
+| data.avg_burn                     | float  | 日均消耗热量（kcal）   |
+| data.avg_net                      | float  | 日均净热量             |
+| data.total_meals                  | int    | 周总餐次               |
+| data.total_exercises              | int    | 周总运动次数           |
+| data.active_days                  | int    | 有记录的天数           |
+| data.daily_breakdown              | array  | 每日明细（7天）        |
+| data.daily_breakdown[].date       | string | 日期                   |
+| data.daily_breakdown[].intake_calories | float | 当日摄入热量      |
+| data.daily_breakdown[].burn_calories   | float | 当日消耗热量      |
+| data.daily_breakdown[].net_calories    | float | 当日净热量        |
+
+**错误响应**:
+- 日期格式错误（HTTP 400）:
+```json
+{
+  "detail": "日期格式错误，请使用 YYYY-MM-DD 格式，收到: invalid-date"
+}
+```
+
+---
+
+### 19. 每日营养素统计 ⭐
+
+**接口地址**: `GET /api/stats/nutrients/daily`
+
+**接口描述**: 获取指定用户在指定日期的营养素摄入统计，包括蛋白质、脂肪、碳水化合物的摄入量和占比，以及与《中国居民膳食指南2022》建议值的对比
+
+**请求参数**:
+| 参数名 | 类型   | 必填 | 说明                       |
+| ------ | ------ | ---- | -------------------------- |
+| userId | int    | 是   | 用户ID，>0                 |
+| date   | string | 是   | 统计日期（YYYY-MM-DD格式） |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/nutrients/daily?userId=1&date=2026-02-05
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "date": "2026-02-05",
+    "user_id": 1,
+    "total_protein": 75.0,
+    "total_fat": 60.0,
+    "total_carbs": 280.0,
+    "total_calories": 1960.0,
+    "protein_calories": 300.0,
+    "fat_calories": 540.0,
+    "carbs_calories": 1120.0,
+    "protein_ratio": 15.3,
+    "fat_ratio": 27.6,
+    "carbs_ratio": 57.1,
+    "meal_count": 3,
+    "meal_breakdown": {
+      "breakfast": {"protein": 20.0, "fat": 15.0, "carbs": 60.0, "calories": 455.0},
+      "lunch": {"protein": 35.0, "fat": 30.0, "carbs": 120.0, "calories": 890.0},
+      "dinner": {"protein": 20.0, "fat": 15.0, "carbs": 100.0, "calories": 615.0}
+    },
+    "guidelines_comparison": {
+      "protein": {
+        "actual_ratio": 15.3,
+        "recommended_min": 10,
+        "recommended_max": 15,
+        "status": "normal",
+        "message": "蛋白质摄入在建议范围内"
+      },
+      "fat": {
+        "actual_ratio": 27.6,
+        "recommended_min": 20,
+        "recommended_max": 30,
+        "status": "normal",
+        "message": "脂肪摄入在建议范围内"
+      },
+      "carbs": {
+        "actual_ratio": 57.1,
+        "recommended_min": 50,
+        "recommended_max": 65,
+        "status": "normal",
+        "message": "碳水化合物摄入在建议范围内"
+      }
+    }
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                    | 类型   | 说明                                     |
+| --------------------------------------- | ------ | ---------------------------------------- |
+| code                                    | int    | 状态码，200表示成功                      |
+| message                                 | string | 响应消息                                 |
+| data.date                               | string | 统计日期                                 |
+| data.user_id                            | int    | 用户ID                                   |
+| data.total_protein                      | float  | 蛋白质总量（g）                          |
+| data.total_fat                          | float  | 脂肪总量（g）                            |
+| data.total_carbs                        | float  | 碳水化合物总量（g）                      |
+| data.total_calories                     | float  | 总热量（kcal）                           |
+| data.protein_calories                   | float  | 蛋白质提供的热量（kcal）                 |
+| data.fat_calories                       | float  | 脂肪提供的热量（kcal）                   |
+| data.carbs_calories                     | float  | 碳水化合物提供的热量（kcal）             |
+| data.protein_ratio                      | float  | 蛋白质热量占比（%）                      |
+| data.fat_ratio                          | float  | 脂肪热量占比（%）                        |
+| data.carbs_ratio                        | float  | 碳水化合物热量占比（%）                  |
+| data.meal_count                         | int    | 餐次数量                                 |
+| data.meal_breakdown                     | object | 按餐次的营养素分类统计                   |
+| data.guidelines_comparison              | object | 与膳食指南对比结果                       |
+| data.guidelines_comparison.*.status     | string | 状态：low（偏低）/normal（正常）/high（偏高） |
+| data.guidelines_comparison.*.message    | string | 对比说明                                 |
+
+**膳食指南建议值（中国居民膳食指南2022）**:
+| 营养素   | 建议占比 |
+| -------- | -------- |
+| 蛋白质   | 10-15%   |
+| 脂肪     | 20-30%   |
+| 碳水化合物 | 50-65% |
+
+**错误响应**:
+- 日期格式错误（HTTP 400）:
+```json
+{
+  "detail": "日期格式错误，请使用 YYYY-MM-DD 格式，收到: invalid-date"
+}
+```
+
+---
+
+### 20. 健康目标达成率 ⭐（Phase 36）
+
+**接口地址**: `GET /api/stats/goal-progress`
+
+**接口描述**: 根据用户设置的健康目标，统计指定天数内的饮食和运动数据，计算各维度达成率和综合得分。支持减脂、增肌、控糖、均衡四种目标类型。
+
+**请求参数（Query）**:
+| 参数   | 类型 | 必填 | 说明                         |
+| ------ | ---- | ---- | ---------------------------- |
+| userId | int  | 是   | 用户ID（>0）                 |
+| days   | int  | 否   | 统计天数（1-90，默认7）      |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/goal-progress?userId=1&days=7
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "user_id": 1,
+    "health_goal": "reduce_fat",
+    "health_goal_label": "减脂",
+    "period_days": 7,
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-07",
+    "overall_score": 75.0,
+    "overall_status": "good",
+    "dimensions": [
+      {
+        "name": "热量控制",
+        "score": 85.0,
+        "status": "good",
+        "current_value": 1600.0,
+        "target_value": 1756.0,
+        "unit": "kcal/天",
+        "description": "日均摄入1600kcal，建议1756kcal"
+      },
+      {
+        "name": "脂肪比例",
+        "score": 90.0,
+        "status": "excellent",
+        "current_value": 22.5,
+        "target_value": 30.0,
+        "unit": "%",
+        "description": "脂肪占比22.5%，在建议范围内"
+      },
+      {
+        "name": "运动消耗",
+        "score": 80.0,
+        "status": "good",
+        "current_value": 240.0,
+        "target_value": 300.0,
+        "unit": "kcal/天",
+        "description": "日均运动消耗240kcal，建议300kcal"
+      }
+    ],
+    "suggestions": [
+      "运动消耗不足，建议增加有氧运动频率和时长",
+      "已连续记录7天，非常棒，继续保持！"
+    ],
+    "streak_days": 7
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                       | 类型     | 说明                                            |
+| -------------------------- | -------- | ----------------------------------------------- |
+| data.user_id               | int      | 用户ID                                          |
+| data.health_goal           | string   | 健康目标类型                                    |
+| data.health_goal_label     | string   | 健康目标中文标签                                |
+| data.period_days           | int      | 统计天数                                        |
+| data.start_date            | string   | 统计起始日期                                    |
+| data.end_date              | string   | 统计结束日期                                    |
+| data.overall_score         | float    | 综合得分（0-100）                               |
+| data.overall_status        | string   | 综合状态：excellent/good/fair/poor              |
+| data.dimensions            | array    | 各维度评估详情                                  |
+| data.dimensions[].name     | string   | 维度名称                                        |
+| data.dimensions[].score    | float    | 维度得分（0-100）                               |
+| data.dimensions[].status   | string   | 维度状态：excellent/good/fair/poor              |
+| data.dimensions[].current_value | float | 当前指标值                                    |
+| data.dimensions[].target_value  | float | 目标指标值                                    |
+| data.dimensions[].unit     | string   | 指标单位                                        |
+| data.dimensions[].description | string | 维度描述说明                                  |
+| data.suggestions           | array    | 个性化建议列表                                  |
+| data.streak_days           | int      | 连续记录天数                                    |
+
+**各目标类型评估维度**:
+| 目标类型       | 维度1    | 维度2    | 维度3    |
+| -------------- | -------- | -------- | -------- |
+| reduce_fat（减脂） | 热量控制 | 脂肪比例 | 运动消耗 |
+| gain_muscle（增肌）| 蛋白质摄入 | 热量充足 | 运动消耗 |
+| control_sugar（控糖）| 碳水比例 | 热量控制 | 运动辅助 |
+| balanced（均衡）  | 营养均衡 | 运动规律 | 饮食规律 |
+
+---
+
+### 21. 新增运动记录 ⭐
+
+**接口地址**: `POST /api/exercise/record`
+
+**接口描述**: 新增一条运动执行记录，可关联运动计划
+
+**请求头**:
+```
+Content-Type: application/json
+```
+
+**请求参数**:
+| 参数名           | 类型         | 必填 | 说明                                                                     |
+| ---------------- | ------------ | ---- | ------------------------------------------------------------------------ |
+| user_id          | int          | 是   | 用户ID，>0                                                               |
+| plan_id          | int\|null    | 否   | 关联的运动计划ID（可选，关联后自动填充计划数据）                         |
+| exercise_type    | string       | 否   | 运动类型，默认walking。可选值见下方                                      |
+| actual_calories  | float        | 是   | 实际消耗热量（kcal），≥0                                                 |
+| actual_duration  | int          | 是   | 实际运动时长（分钟），≥1                                                 |
+| distance         | float\|null  | 否   | 运动距离（米），≥0                                                       |
+| route_data       | string\|null | 否   | 路线数据（JSON格式）                                                     |
+| planned_calories | float\|null  | 否   | 计划消耗热量（kcal）。关联plan_id时可自动从计划读取                      |
+| planned_duration | int\|null    | 否   | 计划运动时长（分钟）。关联plan_id时可自动从计划读取                      |
+| exercise_date    | string       | 是   | 运动日期（YYYY-MM-DD格式）                                               |
+| started_at       | string\|null | 否   | 运动开始时间（ISO格式，如 2026-02-06T18:00:00）                          |
+| ended_at         | string\|null | 否   | 运动结束时间（ISO格式），必须晚于started_at                              |
+| notes            | string\|null | 否   | 运动备注，最大500字符                                                    |
+
+**exercise_type 可选值**:
+- `walking` - 步行（默认）
+- `running` - 跑步
+- `cycling` - 骑行
+- `jogging` - 慢跑
+- `hiking` - 徒步
+- `swimming` - 游泳
+- `gym` - 健身房
+- `indoor` - 室内运动
+- `outdoor` - 户外运动
+
+**请求示例**:
+```bash
+POST http://localhost:8000/api/exercise/record
+Content-Type: application/json
+
+{
+  "user_id": 1,
+  "plan_id": 1,
+  "exercise_type": "running",
+  "actual_calories": 280.0,
+  "actual_duration": 35,
+  "distance": 4500.0,
+  "exercise_date": "2026-02-06",
+  "started_at": "2026-02-06T18:00:00",
+  "ended_at": "2026-02-06T18:35:00",
+  "notes": "沿河跑步，感觉不错"
+}
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "运动记录添加成功",
+  "data": {
+    "id": 1,
+    "user_id": 1,
+    "plan_id": 1,
+    "exercise_type": "running",
+    "actual_calories": 280.0,
+    "actual_duration": 35,
+    "distance": 4500.0,
+    "route_data": null,
+    "planned_calories": 300.0,
+    "planned_duration": 35,
+    "exercise_date": "2026-02-06",
+    "started_at": "2026-02-06T18:00:00",
+    "ended_at": "2026-02-06T18:35:00",
+    "notes": "沿河跑步，感觉不错",
+    "created_at": "2026-02-06T18:40:00",
+    "calories_achievement": 93.3,
+    "duration_achievement": 100.0
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                      | 类型        | 说明                                         |
+| ------------------------- | ----------- | -------------------------------------------- |
+| data.id                   | int         | 运动记录ID                                   |
+| data.user_id              | int         | 用户ID                                       |
+| data.plan_id              | int\|null   | 关联的运动计划ID                             |
+| data.exercise_type        | string      | 运动类型                                     |
+| data.actual_calories      | float       | 实际消耗热量（kcal）                         |
+| data.actual_duration      | int         | 实际运动时长（分钟）                         |
+| data.distance             | float\|null | 运动距离（米）                               |
+| data.planned_calories     | float\|null | 计划消耗热量（kcal）                         |
+| data.planned_duration     | int\|null   | 计划运动时长（分钟）                         |
+| data.exercise_date        | string      | 运动日期                                     |
+| data.started_at           | string\|null| 运动开始时间                                 |
+| data.ended_at             | string\|null| 运动结束时间                                 |
+| data.notes                | string\|null| 运动备注                                     |
+| data.created_at           | string      | 记录创建时间                                 |
+| data.calories_achievement | float\|null | 热量达成率（%），实际/计划×100               |
+| data.duration_achievement | float\|null | 时长达成率（%），实际/计划×100               |
+
+**错误响应**:
+
+*用户不存在*（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，user_id: 1"
+}
+```
+
+*不支持的运动类型*（HTTP 400）:
+```json
+{
+  "detail": "不支持的运动类型: skateboarding，支持的类型: cycling, gym, hiking, indoor, jogging, outdoor, running, swimming, walking"
+}
+```
+
+*运动计划不存在*（HTTP 404）:
+```json
+{
+  "detail": "运动计划不存在，plan_id: 999"
+}
+```
+
+*无权关联他人计划*（HTTP 403）:
+```json
+{
+  "detail": "无权关联此运动计划，只能关联自己的计划"
+}
+```
+
+---
+
+### 21. 查询运动记录列表 ⭐
+
+**接口地址**: `GET /api/exercise/records`
+
+**接口描述**: 查询用户的运动记录列表，支持按日期、运动类型、计划ID筛选和分页
+
+**请求参数**:
+| 参数名        | 类型        | 必填 | 说明                                     |
+| ------------- | ----------- | ---- | ---------------------------------------- |
+| userId        | int         | 是   | 用户ID                                   |
+| exercise_date | string\|null| 否   | 按日期筛选（YYYY-MM-DD格式）             |
+| exercise_type | string\|null| 否   | 按运动类型筛选                           |
+| plan_id       | int\|null   | 否   | 按运动计划ID筛选                         |
+| limit         | int         | 否   | 返回数量限制（默认50，最大200）          |
+| offset        | int         | 否   | 偏移量（默认0）                          |
+
+**请求示例**:
+```bash
+# 查询全部记录
+GET http://localhost:8000/api/exercise/records?userId=1
+
+# 按日期筛选
+GET http://localhost:8000/api/exercise/records?userId=1&exercise_date=2026-02-06
+
+# 按运动类型筛选
+GET http://localhost:8000/api/exercise/records?userId=1&exercise_type=running
+
+# 分页查询
+GET http://localhost:8000/api/exercise/records?userId=1&limit=10&offset=0
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "plan_id": 1,
+      "exercise_type": "running",
+      "actual_calories": 280.0,
+      "actual_duration": 35,
+      "distance": 4500.0,
+      "exercise_date": "2026-02-06",
+      "calories_achievement": 93.3,
+      "duration_achievement": 100.0
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### 22. 查询运动记录详情 ⭐
+
+**接口地址**: `GET /api/exercise/record/{record_id}`
+
+**接口描述**: 查询指定运动记录的详情（含权限校验）
+
+**路径参数**:
+| 参数名    | 类型 | 必填 | 说明       |
+| --------- | ---- | ---- | ---------- |
+| record_id | int  | 是   | 运动记录ID |
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                   |
+| ------ | ---- | ---- | ---------------------- |
+| userId | int  | 是   | 用户ID（用于权限校验） |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/exercise/record/1?userId=1
+```
+
+**响应示例**: 与新增运动记录响应的 `data` 字段格式相同
+
+**错误响应**:
+
+*记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "运动记录不存在，record_id: 1"
+}
+```
+
+*无权查看*（HTTP 403）:
+```json
+{
+  "detail": "无权查看此运动记录，只能查看自己的记录"
+}
+```
+
+---
+
+### 23. 删除运动记录 ⭐
+
+**接口地址**: `DELETE /api/exercise/record/{record_id}`
+
+**接口描述**: 删除指定运动记录（含权限校验）
+
+**路径参数**:
+| 参数名    | 类型 | 必填 | 说明       |
+| --------- | ---- | ---- | ---------- |
+| record_id | int  | 是   | 运动记录ID |
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                   |
+| ------ | ---- | ---- | ---------------------- |
+| userId | int  | 是   | 用户ID（用于权限校验） |
+
+**请求示例**:
+```bash
+DELETE http://localhost:8000/api/exercise/record/1?userId=1
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "删除成功",
+  "data": null
+}
+```
+
+**错误响应**:
+
+*记录不存在*（HTTP 404）:
+```json
+{
+  "detail": "运动记录不存在，record_id: 1"
+}
+```
+
+*无权删除*（HTTP 403）:
+```json
+{
+  "detail": "无权删除此运动记录，只能删除自己的记录"
+}
+```
+
+---
+
+### 21. 运动频率分析 ⭐（Phase 51）
+
+**接口地址**: `GET /api/stats/exercise-frequency`
+
+**接口描述**: 统计指定周期内的运动频率、类型分布，并给出评级和建议。支持周/月两种周期。
+
+**请求参数**:
+| 参数名  | 类型   | 必填 | 说明                                    |
+| ------- | ------ | ---- | --------------------------------------- |
+| user_id | int    | 是   | 用户ID                                    |
+| period  | string | 否   | 统计周期：week=最近一周（默认），month=最近30天 |
+
+**请求示例**:
+```bash
+GET http://localhost:8000/api/stats/exercise-frequency?user_id=1&period=week
+```
+
+**响应示例**:
+```json
+{
+  "code": 200,
+  "message": "获取成功",
+  "data": {
+    "user_id": 1,
+    "period": "week",
+    "period_label": "最近一周",
+    "start_date": "2026-02-01",
+    "end_date": "2026-02-07",
+    "total_days": 7,
+    "active_days": 4,
+    "total_exercise_count": 6,
+    "total_duration": 210,
+    "total_calories": 1200.0,
+    "avg_frequency": 6.0,
+    "avg_duration_per_session": 35.0,
+    "avg_calories_per_session": 200.0,
+    "daily_data": [
+      {
+        "date": "2026-02-01",
+        "count": 2,
+        "total_duration": 60,
+        "total_calories": 400.0,
+        "exercise_types": ["walking", "running"]
+      },
+      {
+        "date": "2026-02-02",
+        "count": 0,
+        "total_duration": 0,
+        "total_calories": 0.0,
+        "exercise_types": []
+      }
+    ],
+    "type_distribution": [
+      {
+        "exercise_type": "walking",
+        "label": "步行",
+        "count": 3,
+        "total_duration": 90,
+        "total_calories": 400.0,
+        "percentage": 50.0
+      },
+      {
+        "exercise_type": "running",
+        "label": "跑步",
+        "count": 3,
+        "total_duration": 120,
+        "total_calories": 800.0,
+        "percentage": 50.0
+      }
+    ],
+    "frequency_rating": "good",
+    "frequency_suggestion": "运动频率良好，建议逐步增加到每周5天"
+  }
+}
+```
+
+**响应字段说明**:
+| 字段                                    | 类型   | 说明                                      |
+| --------------------------------------- | ------ | ----------------------------------------- |
+| data.user_id                            | int    | 用户ID                                      |
+| data.period                             | string | 统计周期（week/month）                   |
+| data.period_label                       | string | 统计周期中文标签                       |
+| data.start_date                         | string | 统计起始日期                             |
+| data.end_date                           | string | 统计结束日期                             |
+| data.total_days                         | int    | 统计总天数                               |
+| data.active_days                        | int    | 有运动记录的天数                       |
+| data.total_exercise_count               | int    | 总运动次数                               |
+| data.total_duration                     | int    | 总运动时长（分钟）                       |
+| data.total_calories                     | float  | 总消耗热量（kcal）                       |
+| data.avg_frequency                      | float  | 平均每周运动次数                       |
+| data.avg_duration_per_session           | float  | 平均每次运动时长（分钟）               |
+| data.avg_calories_per_session           | float  | 平均每次消耗热量（kcal）               |
+| data.daily_data                         | array  | 每日运动频率明细                       |
+| data.daily_data[].date                  | string | 日期                                      |
+| data.daily_data[].count                 | int    | 当日运动次数                           |
+| data.daily_data[].total_duration        | int    | 当日总时长（分钟）                       |
+| data.daily_data[].total_calories        | float  | 当日总消耗（kcal）                       |
+| data.daily_data[].exercise_types        | array  | 当日运动类型列表                       |
+| data.type_distribution                  | array  | 运动类型分布                             |
+| data.type_distribution[].exercise_type  | string | 运动类型代码                           |
+| data.type_distribution[].label          | string | 运动类型中文标签                       |
+| data.type_distribution[].count          | int    | 该类型运动次数                         |
+| data.type_distribution[].total_duration | int    | 该类型总时长（分钟）                     |
+| data.type_distribution[].total_calories | float  | 该类型总消耗（kcal）                     |
+| data.type_distribution[].percentage     | float  | 次数占比（%）                            |
+| data.frequency_rating                   | string | 评级（excellent/good/fair/insufficient） |
+| data.frequency_suggestion               | string | 运动频率建议                             |
+
+**错误响应**:
+- period参数错误（HTTP 400）:
+```json
+{
+  "detail": "period参数错误，仅支持 week 或 month，收到: daily"
+}
+```
+
+---
+
+### 22. 一键遗忘 - 删除用户所有数据（Phase 55）
+
+**接口地址**: `DELETE /api/user/data`
+
+**接口描述**: 完全删除用户所有云端数据，包括饮食记录、运动记录、运动计划、菜单识别记录、餐前餐后对比、用户账号及偏好设置。此操作不可逆。
+
+**请求参数**:
+| 参数名 | 类型 | 必填 | 说明                   |
+| ------ | ---- | ---- | ---------------------- |
+| userId | int  | 是   | 用户ID，必须大于0         |
+
+**请求示例**:
+```bash
+DELETE http://localhost:8000/api/user/data?userId=123
+```
+
+**成功响应** (HTTP 200):
+```json
+{
+  "code": 200,
+  "message": "数据删除成功",
+  "data": {
+    "user_id": 123,
+    "nickname": "健康达人",
+    "deleted_counts": {
+      "diet_records": 15,
+      "exercise_records": 8,
+      "meal_comparisons": 3,
+      "menu_recognitions": 5,
+      "trip_plans": 4
+    },
+    "total_deleted": 35
+  }
+}
+```
+
+**字段说明**:
+| 字段名                        | 类型   | 说明                   |
+| ----------------------------- | ------ | ---------------------- |
+| data.user_id                  | int    | 被删除的用户ID         |
+| data.nickname                 | string | 被删除用户的昵称       |
+| data.deleted_counts           | object | 各表删除数量统计       |
+| data.total_deleted            | int    | 总计删除记录数         |
+
+**错误响应**:
+- 用户不存在（HTTP 404）:
+```json
+{
+  "detail": "用户不存在，userId: 999"
+}
+```
+- 无效用户ID（HTTP 400）:
+```json
+{
+  "detail": "无效的用户ID，必须大于0"
+}
+```
+
+---
+
 ## 更新日志
+
+### v1.10.0 (2026-02-07)
+- ✅ 添加一键遗忘接口 `DELETE /api/user/data`（Phase 55）
+- ✅ 级联删除用户所有关联数据（饮食、运动、对比、识别、计划）
+- ✅ 返回删除统计信息
+
+### v1.9.0 (2026-02-07)
+- ✅ 添加运动频率分析接口 `GET /api/stats/exercise-frequency`（Phase 51）
+- ✅ 支持周/月两种统计周期
+- ✅ 返回每日明细、类型分布、频率评级和个性化建议
+
+### v1.8.0 (2026-02-06)
+- ✅ 添加健康目标达成率接口 `GET /api/stats/goal-progress`（Phase 36）
+- ✅ 支持四种目标类型：减脂、增肌、控糖、均衡
+- ✅ 多维度评估：热量控制、营养素比例、运动消耗等
+- ✅ 返回综合得分、各维度详情、个性化建议、连续记录天数
+
+### v1.7.0 (2026-02-06)
+- ✅ 饮食-运动数据联动（Phase 26）
+- ✅ 每日热量统计接口关联运动记录（ExerciseRecord），区分计划消耗与实际消耗
+- ✅ 新增字段：`planned_burn_calories`、`actual_burn_calories`、`actual_exercise_count`、`actual_exercise_duration`
+- ✅ 新增字段：`calorie_deficit`（热量缺口）、`goal_achievement_rate`（目标达成率）
+- ✅ `burn_calories` 智能选择：有运动记录时用实际值，否则用计划值
+
+### v1.6.0 (2026-02-06)
+- ✅ 添加运动记录数据模型 `ExerciseRecord`（Phase 25）
+- ✅ 添加新增运动记录接口 `POST /api/exercise/record`
+- ✅ 添加查询运动记录列表接口 `GET /api/exercise/records`（支持按日期/类型/计划ID筛选、分页）
+- ✅ 添加查询运动记录详情接口 `GET /api/exercise/record/{record_id}`
+- ✅ 添加删除运动记录接口 `DELETE /api/exercise/record/{record_id}`
+- ✅ 支持关联运动计划、自动填充计划数据
+- ✅ 支持热量达成率和时长达成率计算
+- ✅ 完善权限校验（只能操作自己的记录）
+
+### v1.9.0 (2026-02-07)
+- ✅ 添加离线运动包生成接口 `POST /api/trip/offline-package`（Phase 46）
+- ✅ 添加离线运动包下载接口 `GET /api/trip/offline-package/{package_id}`（Phase 46）
+- ✅ 实现地图瓦片区域计算与元数据生成
+- ✅ 实现POI数据提取与打包
+- ✅ 实现运动方案文本生成
+- ✅ 支持离线包版本管理
+
+### v1.5.0 (2026-02-05)
+- ✅ 添加每日营养素统计接口 `/api/stats/nutrients/daily`（Phase 16）
+- ✅ 统计蛋白质、脂肪、碳水化合物摄入量和占比
+- ✅ 与《中国居民膳食指南2022》建议值对比
+- ✅ 支持按餐次分类统计营养素
+
+### v1.4.0 (2026-02-04)
+- ✅ 添加每日热量统计接口 `/api/stats/calories/daily`（Phase 15）
+- ✅ 添加每周热量统计接口 `/api/stats/calories/weekly`（Phase 15）
+- ✅ 统计摄入热量（来自饮食记录）和消耗热量（来自运动计划）
+- ✅ 支持餐次分类统计和每日明细
+
+### v1.3.0 (2026-02-04)
+- ✅ 添加餐后图片上传接口 `/api/food/meal/after/{comparison_id}`（Phase 12）
+- ✅ 实现AI餐前餐后图片对比（Qwen-VL）
+- ✅ 计算消耗比例和净摄入热量
+- ✅ 创建meal_comparison_service处理对比逻辑
+
+### v1.2.0 (2026-02-04)
+- ✅ 添加餐前图片上传接口 `/api/food/meal/before`（Phase 11）
+- ✅ 实现AI图片特征提取（菜品识别、份量估算、热量估算）
+- ✅ 创建MealComparison数据模型用于餐前餐后对比
 
 ### v1.1.0 (2026-02-03)
 - ✅ 实现JWT双令牌认证机制（Access Token + Refresh Token）
@@ -1733,4 +3371,17 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 - ✅ 实现用户注册和登录
 - ✅ 实现用户偏好设置
 - ✅ 集成天气查询服务（Open-Meteo）
+
+### v1.4.7 (2026-02-07) Phase 57
+- ✅ 实现Few-shot Prompt模板管理服务 `app/services/prompt_template_service.py`
+- ✅ 所有AI调用方法（food_analysis/exercise_intent/trip_generation/menu_recognition/before_meal_features/meal_comparison）统一接入模板服务
+- ✅ 实现运动偏好意图理解增强：槽位提取支持运动类型/时长(duration_minutes)/强度(intensity)
+- ✅ 支持模板版本管理、Few-shot示例增删、动态变量替换、JSON持久化
+
+### v1.4.6 (2026-02-07) Phase 56
+- ✅ 添加AI调用日志接口 `GET /api/user/ai-logs`
+- ✅ 添加AI调用统计接口 `GET /api/user/ai-logs/stats`
+- ✅ 自动记录所有6种AI调用到ai_call_log表（含before_meal_features和meal_comparison）
+- ✅ 支持按调用类型过滤、分页查询
+- ✅ 前端AiCallLogPage展示调用时间、类型、数据摘要、统计信息
 

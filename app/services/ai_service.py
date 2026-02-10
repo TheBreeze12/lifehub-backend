@@ -4,11 +4,28 @@ AI服务 - 调用通义千问API（行程生成）和火山引擎豆包AI（菜�
 import os
 import json
 import base64
+import time
 import tempfile
+import logging
 from typing import List, Optional, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import dashscope
 from dashscope import Generation
+
+logger = logging.getLogger(__name__)
+
+# Phase 57: Few-shot Prompt模板服务（延迟导入，避免循环依赖）
+_prompt_template_service = None
+def _get_prompt_tpl_service():
+    """延迟获取Prompt模板服务单例"""
+    global _prompt_template_service
+    if _prompt_template_service is None:
+        try:
+            from app.services.prompt_template_service import get_prompt_template_service
+            _prompt_template_service = get_prompt_template_service()
+        except Exception as e:
+            logger.warning(f"Prompt模板服务初始化失败，将使用硬编码Prompt: {e}")
+    return _prompt_template_service
 
 # 尝试导入地理编码库（可选）
 try:
@@ -72,6 +89,42 @@ class AIService:
                 print(f"警告: 地理编码服务初始化失败: {e}")
                 print("将使用经纬度坐标，不进行地理编码")
 
+    def _log_ai_call(
+        self,
+        call_type: str,
+        model_name: str,
+        input_summary: str,
+        success: bool,
+        latency_ms: int,
+        user_id: Optional[int] = None,
+        output_summary: Optional[str] = None,
+        error_message: Optional[str] = None,
+        token_usage: Optional[int] = None,
+    ) -> None:
+        """Phase 56: 记录AI调用日志（使用独立DB会话，不影响主流程）"""
+        try:
+            from app.database import SessionLocal
+            from app.services.ai_log_service import get_ai_log_service
+            db = SessionLocal()
+            try:
+                ai_log_service = get_ai_log_service()
+                ai_log_service.log_ai_call(
+                    db=db,
+                    call_type=call_type,
+                    model_name=model_name,
+                    input_summary=input_summary,
+                    success=success,
+                    latency_ms=latency_ms,
+                    user_id=user_id,
+                    output_summary=output_summary,
+                    error_message=error_message,
+                    token_usage=token_usage,
+                )
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"AI调用日志记录失败: {e}")
+
     def geocode_address(self, address: str) -> Optional[Dict[str, float]]:
         """将地址文本转为经纬度坐标"""
         if not address:
@@ -133,7 +186,10 @@ class AIService:
     
     def analyze_food_nutrition(self, food_name: str) -> dict:
         """
-        分析菜品营养成分（使用豆包AI）
+        分析菜品营养成分（使用豆包AI + RAG检索增强）
+        
+        Phase 38增强：先通过RAG检索《中国食物成分表》获取参考数据，
+        将检索结果作为上下文注入LLM Prompt，减少幻觉，提升准确性。
         
         Args:
             food_name: 菜品名称
@@ -147,12 +203,25 @@ class AIService:
         if not self.ark_client:
             raise ValueError("豆包AI未初始化，请检查ARK_API_KEY环境变量")
         
-        return self._analyze_food_nutrition_with_ark(food_name)
-    
-    def _analyze_food_nutrition_with_ark(self, food_name: str) -> dict:
-        """使用豆包AI分析菜品营养"""
-        prompt = self._build_nutrition_prompt(food_name)
+        # Phase 38: RAG检索营养知识上下文
+        rag_context = ""
+        try:
+            from app.services.nutrition_rag_service import get_nutrition_rag_service
+            rag_service = get_nutrition_rag_service()
+            rag_context = rag_service.get_nutrition_context(food_name, top_k=3)
+            if rag_context:
+                print(f"✓ RAG检索到营养知识上下文: {food_name}")
+        except Exception as e:
+            print(f"警告: RAG检索失败，将仅使用LLM分析: {e}")
+            rag_context = ""
         
+        return self._analyze_food_nutrition_with_ark(food_name, rag_context=rag_context)
+    
+    def _analyze_food_nutrition_with_ark(self, food_name: str, rag_context: str = "") -> dict:
+        """使用豆包AI分析菜品营养（Phase 38: 支持RAG上下文注入）"""
+        prompt = self._build_nutrition_prompt(food_name, rag_context=rag_context)
+        
+        start_time = time.time()
         try:
             response = self.ark_client.responses.create(
                 model="doubao-seed-1-6-251015",
@@ -190,84 +259,95 @@ class AIService:
                                 content = item_content
                                 break
             
+            latency_ms = int((time.time() - start_time) * 1000)
             if content:
-                return self._parse_nutrition_response(content, food_name)
+                result = self._parse_nutrition_response(content, food_name)
+                # Phase 56: 记录成功的AI调用
+                self._log_ai_call(
+                    call_type="food_analysis",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary=food_name,
+                    success=True,
+                    latency_ms=latency_ms,
+                    output_summary=f"calories={result.get('calories')}, protein={result.get('protein')}",
+                )
+                return result
             else:
                 raise Exception("豆包AI返回空响应")
                 
         except Exception as e:
+            latency_ms = int((time.time() - start_time) * 1000)
+            # Phase 56: 记录失败的AI调用
+            self._log_ai_call(
+                call_type="food_analysis",
+                model_name="doubao-seed-1-6-251015",
+                input_summary=food_name,
+                success=False,
+                latency_ms=latency_ms,
+                error_message=str(e),
+            )
             print(f"豆包AI调用失败: {str(e)}")
             import traceback
             traceback.print_exc()
             raise
     
-    def _build_nutrition_prompt(self, food_name: str) -> str:
+    def _build_nutrition_prompt(self, food_name: str, rag_context: str = "") -> str:
         """
-        构建营养分析Prompt（含过敏原推理）
+        构建营养分析Prompt（含过敏原推理 + RAG上下文）
         
         Phase 7增强：在营养分析中同时进行隐性过敏原AI推理
+        Phase 38增强：注入RAG检索的营养知识上下文，提升数据准确性
+        Phase 57增强：使用Few-shot Prompt模板服务构建prompt
         """
-        prompt = f"""请分析菜品"{food_name}"的营养成分和可能的过敏原，并以JSON格式返回。
+        # Phase 57: 尝试使用模板服务构建prompt
+        tpl_svc = _get_prompt_tpl_service()
+        if tpl_svc is not None:
+            try:
+                rag_section = ""
+                if rag_context:
+                    rag_section = f"\n\n{rag_context}\n\n重要：请优先参考以上《中国食物成分表》数据给出营养分析，确保数据尽量准确。\n"
+                rendered = tpl_svc.render_prompt("food_analysis", variables={
+                    "food_name": food_name,
+                    "rag_context": rag_section,
+                })
+                # 将few-shot示例内联到prompt文本中（豆包AI使用单prompt模式）
+                parts = [rendered["system_prompt"], ""]
+                for i in range(0, len(rendered["few_shot_messages"]), 2):
+                    user_msg = rendered["few_shot_messages"][i]["content"]
+                    asst_msg = rendered["few_shot_messages"][i + 1]["content"] if i + 1 < len(rendered["few_shot_messages"]) else ""
+                    parts.append(f"示例输入：{user_msg}")
+                    parts.append(f"示例输出：{asst_msg}")
+                    parts.append("")
+                parts.append(rendered["user_prompt"])
+                return "\n".join(parts)
+            except Exception as e:
+                logger.warning(f"模板服务渲染food_analysis失败，回退硬编码: {e}")
 
+        # 回退：原始硬编码prompt
+        rag_section = ""
+        if rag_context:
+            rag_section = f"""\n\n{rag_context}\n\n重要：请优先参考以上《中国食物成分表》数据给出营养分析，确保数据尽量准确。\n"""
+        
+        prompt = f"""请分析菜品"{food_name}"的营养成分和可能的过敏原，并以JSON格式返回。
+{rag_section}
 要求：
 1. 估算每100克的营养数据
 2. 给出减脂人群的饮食建议
 3. 分析该菜品可能包含的八大类过敏原（乳制品、鸡蛋、鱼类、甲壳类、花生、树坚果、小麦、大豆）
-4. 特别注意推理隐性过敏原（如：宫保鸡丁通常含花生；蛋炒饭含鸡蛋；炸酱面含小麦和大豆等）
+4. 特别注意推理隐性过敏原
 5. 只返回JSON，不要其他解释
+6. 如果有参考数据，营养数值应与参考数据接近
+7. 列出该食材/菜品在2-4种不同烹饪方式下的热量和脂肪对比
 
 八大类过敏原代码对照：
-- milk: 乳制品（牛奶、奶酪、黄油、奶油等）
-- egg: 鸡蛋（各种蛋类及其制品）
-- fish: 鱼类（各种鱼类及鱼制品）
-- shellfish: 甲壳类（虾、蟹、贝类等海鲜）
-- peanut: 花生（花生及花生制品）
-- tree_nut: 树坚果（杏仁、核桃、腰果等）
-- wheat: 小麦（面粉、面条、面包等含麸质食品）
-- soy: 大豆（豆腐、豆浆、酱油等豆制品）
+- milk: 乳制品  - egg: 鸡蛋  - fish: 鱼类  - shellfish: 甲壳类
+- peanut: 花生  - tree_nut: 树坚果  - wheat: 小麦  - soy: 大豆
 
 返回格式：
 {{
-    "calories": 热量数值（千卡，浮点数）,
-    "protein": 蛋白质数值（克，浮点数）,
-    "fat": 脂肪数值（克，浮点数）,
-    "carbs": 碳水化合物数值（克，浮点数）,
-    "recommendation": "给减脂人群的建议（50字以内）",
-    "allergens": ["过敏原代码列表，如peanut, egg等"],
-    "allergen_reasoning": "过敏原推理说明（说明为什么这道菜可能含有这些过敏原，100字以内）"
-}}
-
-示例1（宫保鸡丁）：
-{{
-    "calories": 180.0,
-    "protein": 18.0,
-    "fat": 10.0,
-    "carbs": 8.0,
-    "recommendation": "蛋白质丰富，但花生热量较高，建议适量食用。",
-    "allergens": ["peanut", "soy"],
-    "allergen_reasoning": "宫保鸡丁是经典川菜，主要配料包括花生米（花生过敏原），调味通常使用酱油（大豆过敏原）。"
-}}
-
-示例2（番茄炒蛋）：
-{{
-    "calories": 150.0,
-    "protein": 10.5,
-    "fat": 8.2,
-    "carbs": 6.3,
-    "recommendation": "营养均衡，蛋白质含量较高，适合减脂期食用。",
-    "allergens": ["egg"],
-    "allergen_reasoning": "番茄炒蛋的主要食材是鸡蛋，属于蛋类过敏原。"
-}}
-
-示例3（清蒸鲈鱼）：
-{{
-    "calories": 105.0,
-    "protein": 19.5,
-    "fat": 3.0,
-    "carbs": 0.5,
-    "recommendation": "高蛋白低脂肪，非常适合减脂期食用。",
-    "allergens": ["fish", "soy"],
-    "allergen_reasoning": "鲈鱼属于鱼类过敏原，清蒸时通常使用酱油调味（大豆过敏原）。"
+    "calories": 热量数值, "protein": 蛋白质数值, "fat": 脂肪数值, "carbs": 碳水数值,
+    "recommendation": "建议", "allergens": ["代码"], "allergen_reasoning": "推理说明",
+    "cooking_method_comparisons": [{{"method": "方式", "calories": 数值, "fat": 数值, "description": "说明"}}]
 }}
 
 现在请分析"{food_name}"："""
@@ -300,7 +380,9 @@ class AIService:
                     "recommendation": data.get("recommendation", "营养数据仅供参考"),
                     # Phase 7: 过敏原推理字段
                     "allergens": data.get("allergens", []),
-                    "allergen_reasoning": data.get("allergen_reasoning", "")
+                    "allergen_reasoning": data.get("allergen_reasoning", ""),
+                    # Phase 50: 烹饪方式热量差异对比
+                    "cooking_method_comparisons": data.get("cooking_method_comparisons", [])
                 }
                 
                 # 验证过敏原代码是否为有效的八大类
@@ -334,7 +416,9 @@ class AIService:
             "recommendation": f"{food_name}的营养数据暂时无法获取，建议适量食用。",
             # Phase 7: 过敏原推理字段（默认值）
             "allergens": [],
-            "allergen_reasoning": ""
+            "allergen_reasoning": "",
+            # Phase 50: 烹饪方式对比（默认值）
+            "cooking_method_comparisons": []
         }
     
     def generate_trip(self, query: str, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None) -> dict:
@@ -390,7 +474,9 @@ class AIService:
         return None
     
     def _extract_exercise_intent(self, query: str, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None) -> dict:
-        """提取运动意图（卡路里目标、运动类型、时间等）"""
+        """提取运动意图（卡路里目标、运动类型、时长、强度等）
+        Phase 57增强：支持槽位提取 - 运动类型/时长/强度
+        """
         calories_info = ""
         if calories_intake > 0:
             calories_info = f"\n用户今日已摄入卡路里：{calories_intake:.1f} kcal"
@@ -499,7 +585,15 @@ class AIService:
    - 如果查询中提到"一周"、"7天"等，days应该是7
    - 如果未指定，days通常是1
 5. calories_target: 目标消耗卡路里（整数，单位：kcal，如果未指定则根据已摄入卡路里推算）
-6. exercise_type: 运动类型偏好（如"散步"、"跑步"、"骑行"等，如果未指定则为null）
+6. exercise_type: 运动类型偏好（如"散步"、"跑步"、"骑行"、"游泳"等，如果未指定则为null）
+7. duration_minutes: 期望运动时长（整数，分钟，如"30分钟"→30，未指定则为null）
+8. intensity: 运动强度（"低"/"中"/"高"，根据运动类型和用户描述推断，未指定则为null）
+
+强度推断规则：
+- 散步/太极 → 低强度
+- 慢跑/骑行/瑜伽 → 中强度
+- 跑步/游泳/HIIT → 高强度
+- 用户明确说"中等强度"、"高强度"等，直接使用
 
 只返回JSON，不要其他解释。
 
@@ -510,6 +604,31 @@ class AIService:
 - destination必须是具体地点名称，不能包含"附近"、"附近XX"等模糊词汇
 """
         
+        # Phase 57: 尝试使用模板服务构建意图提取prompt
+        tpl_svc = _get_prompt_tpl_service()
+        if tpl_svc is not None:
+            try:
+                rendered = tpl_svc.render_prompt("exercise_intent", variables={
+                    "query": query,
+                    "calories_info": calories_info,
+                    "explicit_place_hint": explicit_place_hint,
+                    "location_hint": location_hint,
+                    "today_date": today_str,
+                })
+                # 将few-shot示例内联到prompt文本中（qwen-turbo使用单prompt模式）
+                parts = [rendered["system_prompt"], ""]
+                for i in range(0, len(rendered["few_shot_messages"]), 2):
+                    user_msg = rendered["few_shot_messages"][i]["content"]
+                    asst_msg = rendered["few_shot_messages"][i + 1]["content"] if i + 1 < len(rendered["few_shot_messages"]) else ""
+                    parts.append(f"示例输入：{user_msg}")
+                    parts.append(f"示例输出：{asst_msg}")
+                    parts.append("")
+                parts.append(rendered["user_prompt"])
+                prompt = "\n".join(parts)
+            except Exception as e:
+                logger.warning(f"模板服务渲染exercise_intent失败，回退硬编码: {e}")
+
+        _intent_start = time.time()
         try:
             response = Generation.call(
                 model="qwen-turbo",
@@ -553,6 +672,16 @@ class AIService:
                         if cleaned:
                             intent["destination"] = cleaned
                     
+                    # Phase 56: 记录成功的AI调用
+                    _intent_latency = int((time.time() - _intent_start) * 1000)
+                    self._log_ai_call(
+                        call_type="exercise_intent",
+                        model_name="qwen-turbo",
+                        input_summary=query,
+                        success=True,
+                        latency_ms=_intent_latency,
+                        output_summary=f"destination={intent.get('destination')}, calories_target={intent.get('calories_target')}",
+                    )
                     return intent
                 else:
                     raise ValueError("未找到JSON数据")
@@ -560,6 +689,16 @@ class AIService:
                 raise Exception(f"API调用失败: {response.message}")
                 
         except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _intent_latency = int((time.time() - _intent_start) * 1000)
+            self._log_ai_call(
+                call_type="exercise_intent",
+                model_name="qwen-turbo",
+                input_summary=query,
+                success=False,
+                latency_ms=_intent_latency,
+                error_message=str(e),
+            )
             print(f"提取运动意图失败: {str(e)}")
             # 返回默认意图
             from datetime import datetime, timedelta
@@ -573,7 +712,9 @@ class AIService:
                 "endDate": today.strftime("%Y-%m-%d"),
                 "days": 1,
                 "calories_target": calories_target,
-                "exercise_type": None
+                "exercise_type": None,
+                "duration_minutes": None,
+                "intensity": None
             }
     
     def _generate_exercise_plan(self, intent: dict, preferences: dict = None, calories_intake: float = 0.0, user_location: dict = None, query: str = "") -> dict:
@@ -779,6 +920,35 @@ class AIService:
     ]
 }}"""
         
+        # Phase 57: 尝试使用模板服务构建运动计划prompt
+        tpl_svc = _get_prompt_tpl_service()
+        if tpl_svc is not None:
+            try:
+                rendered = tpl_svc.render_prompt("trip_generation", variables={
+                    "destination": destination,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "days": str(days),
+                    "calories_target": str(calories_target),
+                    "exercise_type_text": exercise_type_text,
+                    "preference_text": preference_text,
+                    "calories_context": calories_context,
+                    "location_context": location_context,
+                })
+                # 将few-shot示例内联到prompt文本中（qwen-turbo使用单prompt模式）
+                parts = [rendered["system_prompt"], ""]
+                for i in range(0, len(rendered["few_shot_messages"]), 2):
+                    user_msg = rendered["few_shot_messages"][i]["content"]
+                    asst_msg = rendered["few_shot_messages"][i + 1]["content"] if i + 1 < len(rendered["few_shot_messages"]) else ""
+                    parts.append(f"示例输入：{user_msg}")
+                    parts.append(f"示例输出：{asst_msg}")
+                    parts.append("")
+                parts.append(rendered["user_prompt"])
+                prompt = "\n".join(parts)
+            except Exception as e:
+                logger.warning(f"模板服务渲染trip_generation失败，回退硬编码: {e}")
+
+        _plan_start = time.time()
         try:
             response = Generation.call(
                 model="qwen-turbo",
@@ -810,6 +980,17 @@ class AIService:
                     # 后处理：根据提示词或当前时间动态调整startTime，避免固定时间
                     trip_data = self._adjust_plan_times(trip_data, intent, query)
                     
+                    # Phase 56: 记录成功的AI调用
+                    _plan_latency = int((time.time() - _plan_start) * 1000)
+                    self._log_ai_call(
+                        call_type="trip_generation",
+                        model_name="qwen-turbo",
+                        input_summary=query[:200] if query else destination,
+                        success=True,
+                        latency_ms=_plan_latency,
+                        output_summary=f"title={trip_data.get('title')}, items={len(trip_data.get('items', []))}",
+                    )
+                    
                     return trip_data
                 else:
                     raise ValueError("未找到JSON数据")
@@ -817,6 +998,16 @@ class AIService:
                 raise Exception(f"API调用失败: {response.message}")
                 
         except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _plan_latency = int((time.time() - _plan_start) * 1000)
+            self._log_ai_call(
+                call_type="trip_generation",
+                model_name="qwen-turbo",
+                input_summary=query[:200] if query else destination,
+                success=False,
+                latency_ms=_plan_latency,
+                error_message=str(e),
+            )
             print(f"生成运动计划失败: {str(e)}")
             # 返回默认运动计划
             return self._get_default_exercise_plan(intent, calories_target)
@@ -1326,12 +1517,24 @@ class AIService:
         return self._extract_dish_names_with_ark(image_base64)
     
     def _extract_dish_names_with_ark(self, image_base64: str) -> List[str]:
-        """使用豆包AI识别菜单图片"""
+        """使用豆包AI识别菜单图片（Phase 57: 支持模板服务）"""
+        _recog_start = time.time()
         try:
             # 构建base64 data URI（尝试使用data URI格式）
             image_data_uri = f"data:image/jpeg;base64,{image_base64}"
             
-            prompt = """请识别这张菜单图片中的所有菜品名称，并以JSON数组格式返回。
+            # Phase 57: 尝试使用模板服务构建prompt
+            prompt = None
+            tpl_svc = _get_prompt_tpl_service()
+            if tpl_svc is not None:
+                try:
+                    rendered = tpl_svc.render_prompt("menu_recognition", variables={})
+                    prompt = rendered["user_prompt"]
+                except Exception as e:
+                    logger.warning(f"模板服务渲染menu_recognition失败，回退硬编码: {e}")
+            
+            if prompt is None:
+                prompt = """请识别这张菜单图片中的所有菜品名称，并以JSON数组格式返回。
 
 要求：
 1. 只返回菜品名称，不要价格、描述等其他信息
@@ -1380,13 +1583,34 @@ class AIService:
                                     content = sub_item.text
                                     break
             
+            _recog_latency = int((time.time() - _recog_start) * 1000)
             if content:
                 print(content)
-                return self._parse_dish_names_from_content(content)
+                dish_names = self._parse_dish_names_from_content(content)
+                # Phase 56: 记录成功的AI调用
+                self._log_ai_call(
+                    call_type="menu_recognition",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary="菜单图片识别",
+                    success=True,
+                    latency_ms=_recog_latency,
+                    output_summary=f"识别到{len(dish_names)}个菜品: {', '.join(dish_names[:5])}",
+                )
+                return dish_names
             else:
                 raise Exception("无法从响应中提取内容")
                 
         except Exception as e:
+            _recog_latency = int((time.time() - _recog_start) * 1000)
+            # Phase 56: 记录失败的AI调用
+            self._log_ai_call(
+                call_type="menu_recognition",
+                model_name="doubao-seed-1-6-251015",
+                input_summary="菜单图片识别",
+                success=False,
+                latency_ms=_recog_latency,
+                error_message=str(e),
+            )
             print(f"豆包AI识别失败: {str(e)}")
             import traceback
             traceback.print_exc()
@@ -1425,6 +1649,409 @@ class AIService:
             return []
     
    
+    def extract_before_meal_features(self, image_base64: str) -> dict:
+        """
+        从餐前图片中提取特征信息（菜品识别、份量估算、热量估算）
+        
+        Phase 11: 餐前图片特征提取
+        
+        Args:
+            image_base64: base64编码的图片
+            
+        Returns:
+            包含菜品特征的字典：
+            {
+                "dishes": [
+                    {
+                        "name": "菜品名称",
+                        "estimated_weight": 200,  # 估算重量（g）
+                        "estimated_calories": 500,  # 估算热量（kcal）
+                        "estimated_protein": 25.0,  # 估算蛋白质（g）
+                        "estimated_fat": 30.0,  # 估算脂肪（g）
+                        "estimated_carbs": 15.0  # 估算碳水化合物（g）
+                    }
+                ],
+                "total_estimated_calories": 580,
+                "total_estimated_protein": 30.0,
+                "total_estimated_fat": 35.0,
+                "total_estimated_carbs": 20.0
+            }
+        """
+        if not self.ark_client:
+            raise ValueError("豆包AI未初始化，请检查ARK_API_KEY环境变量")
+        
+        return self._extract_before_meal_features_with_ark(image_base64)
+    
+    def _extract_before_meal_features_with_ark(self, image_base64: str) -> dict:
+        """使用豆包AI从餐前图片提取特征（Phase 57: 支持模板服务）"""
+        _bf_start = time.time()
+        try:
+            image_data_uri = f"data:image/jpeg;base64,{image_base64}"
+            
+            # Phase 57: 尝试使用模板服务构建prompt
+            prompt = None
+            tpl_svc = _get_prompt_tpl_service()
+            if tpl_svc is not None:
+                try:
+                    rendered = tpl_svc.render_prompt("before_meal_features", variables={})
+                    prompt = rendered["user_prompt"]
+                except Exception as e:
+                    logger.warning(f"模板服务渲染before_meal_features失败，回退硬编码: {e}")
+            
+            if prompt is None:
+                prompt = """请分析这张餐前食物图片，识别图片中的所有菜品，并估算每个菜品的份量和营养成分。
+
+要求：
+1. 识别图片中所有可见的菜品
+2. 根据视觉判断估算每个菜品的重量（克）
+3. 根据菜品类型和重量估算热量、蛋白质、脂肪、碳水化合物
+4. 计算所有菜品的总营养成分
+5. 只返回JSON，不要其他解释
+6. 如果图片不是食物图片，返回空dishes数组
+
+请分析图片："""
+            
+            response = self.ark_client.responses.create(
+                model="doubao-seed-1-6-251015",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_image",
+                                "image_url": image_data_uri
+                            },
+                            {
+                                "type": "input_text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+            
+            # 解析响应
+            content = None
+            if hasattr(response, 'output') and response.output:
+                output = response.output
+                if isinstance(output, list) and len(output) > 0:
+                    for item in output:
+                        if hasattr(item, 'content') and item.content:
+                            item_content = item.content
+                            if isinstance(item_content, list) and len(item_content) > 0:
+                                sub_item = item_content[0]
+                                if hasattr(sub_item, 'text') and sub_item.text:
+                                    content = sub_item.text
+                                    break
+            
+            if content:
+                result = self._parse_before_meal_features(content)
+                # Phase 56: 记录成功的AI调用
+                _bf_latency = int((time.time() - _bf_start) * 1000)
+                self._log_ai_call(
+                    call_type="food_analysis",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary="餐前图片特征提取",
+                    success=True,
+                    latency_ms=_bf_latency,
+                    output_summary=f"dishes={len(result.get('dishes', []))}, calories={result.get('total_estimated_calories')}",
+                )
+                return result
+            else:
+                raise Exception("豆包AI返回空响应")
+                
+        except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _bf_latency = int((time.time() - _bf_start) * 1000)
+            self._log_ai_call(
+                call_type="food_analysis",
+                model_name="doubao-seed-1-6-251015",
+                input_summary="餐前图片特征提取",
+                success=False,
+                latency_ms=_bf_latency,
+                error_message=str(e),
+            )
+            print(f"餐前图片特征提取失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def _parse_before_meal_features(self, content: str) -> dict:
+        """解析餐前图片特征提取结果"""
+        try:
+            json_start = content.find('{')
+            json_end = content.rfind('}') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                json_str = content[json_start:json_end]
+                data = json.loads(json_str)
+                
+                # 确保必需字段存在
+                dishes = data.get("dishes", [])
+                
+                # 处理每个菜品
+                processed_dishes = []
+                for dish in dishes:
+                    processed_dish = {
+                        "name": dish.get("name", "未知菜品"),
+                        "estimated_weight": int(dish.get("estimated_weight", 100)),
+                        "estimated_calories": float(dish.get("estimated_calories", 0)),
+                        "estimated_protein": float(dish.get("estimated_protein", 0)),
+                        "estimated_fat": float(dish.get("estimated_fat", 0)),
+                        "estimated_carbs": float(dish.get("estimated_carbs", 0))
+                    }
+                    processed_dishes.append(processed_dish)
+                
+                result = {
+                    "dishes": processed_dishes,
+                    "total_estimated_calories": float(data.get("total_estimated_calories", 0)),
+                    "total_estimated_protein": float(data.get("total_estimated_protein", 0)),
+                    "total_estimated_fat": float(data.get("total_estimated_fat", 0)),
+                    "total_estimated_carbs": float(data.get("total_estimated_carbs", 0))
+                }
+                
+                # 如果总热量为0但有菜品，重新计算
+                if result["total_estimated_calories"] == 0 and processed_dishes:
+                    result["total_estimated_calories"] = sum(d["estimated_calories"] for d in processed_dishes)
+                    result["total_estimated_protein"] = sum(d["estimated_protein"] for d in processed_dishes)
+                    result["total_estimated_fat"] = sum(d["estimated_fat"] for d in processed_dishes)
+                    result["total_estimated_carbs"] = sum(d["estimated_carbs"] for d in processed_dishes)
+                
+                return result
+            else:
+                raise ValueError("未找到JSON数据")
+                
+        except Exception as e:
+            print(f"解析餐前特征失败: {str(e)}")
+            print(f"原始内容: {content}")
+            # 返回空结果
+            return {
+                "dishes": [],
+                "total_estimated_calories": 0,
+                "total_estimated_protein": 0,
+                "total_estimated_fat": 0,
+                "total_estimated_carbs": 0
+            }
+
+    def compare_before_after_meal(
+        self, 
+        before_image_base64: str, 
+        after_image_base64: str,
+        before_features: dict
+    ) -> dict:
+        """
+        对比餐前餐后图片，计算剩余比例
+        
+        Phase 12: 餐前餐后对比计算
+        
+        Args:
+            before_image_base64: 餐前图片base64编码
+            after_image_base64: 餐后图片base64编码
+            before_features: 餐前图片特征（包含识别的菜品和估算热量）
+            
+        Returns:
+            包含对比结果的字典：
+            {
+                "dishes": [
+                    {
+                        "name": "菜品名称",
+                        "remaining_ratio": 0.25,  # 剩余比例（0-1）
+                        "remaining_weight": 50  # 估算剩余重量（g）
+                    }
+                ],
+                "overall_remaining_ratio": 0.25,  # 整体剩余比例
+                "consumption_ratio": 0.75,  # 消耗比例 = 1 - 剩余比例
+                "comparison_analysis": "AI对比分析说明"
+            }
+        """
+        if not self.ark_client:
+            raise ValueError("豆包AI未初始化，请检查ARK_API_KEY环境变量")
+        
+        return self._compare_before_after_meal_with_ark(
+            before_image_base64, 
+            after_image_base64,
+            before_features
+        )
+    
+    def _compare_before_after_meal_with_ark(
+        self, 
+        before_image_base64: str, 
+        after_image_base64: str,
+        before_features: dict
+    ) -> dict:
+        """使用豆包AI对比餐前餐后图片（Phase 57: 支持模板服务）"""
+        _cmp_start = time.time()
+        try:
+            before_data_uri = f"data:image/jpeg;base64,{before_image_base64}"
+            after_data_uri = f"data:image/jpeg;base64,{after_image_base64}"
+            
+            # 构建餐前菜品信息文本
+            before_dishes_text = ""
+            if before_features and before_features.get("dishes"):
+                dishes_info = []
+                for dish in before_features["dishes"]:
+                    name = dish.get("name", "未知菜品")
+                    weight = dish.get("estimated_weight", 0)
+                    calories = dish.get("estimated_calories", 0)
+                    dishes_info.append(f"- {name}（估算重量：{weight}g，热量：{calories}kcal）")
+                before_dishes_text = "\n".join(dishes_info)
+            
+            # Phase 57: 尝试使用模板服务构建prompt
+            prompt = None
+            tpl_svc = _get_prompt_tpl_service()
+            if tpl_svc is not None:
+                try:
+                    rendered = tpl_svc.render_prompt("meal_comparison", variables={
+                        "before_dishes_text": before_dishes_text if before_dishes_text else "未识别到具体菜品",
+                    })
+                    prompt = rendered["user_prompt"]
+                except Exception as e:
+                    logger.warning(f"模板服务渲染meal_comparison失败，回退硬编码: {e}")
+            
+            if prompt is None:
+                prompt = f"""请对比这两张图片（餐前和餐后），分析用户吃掉了多少食物，剩余了多少。
+
+餐前识别到的菜品信息：
+{before_dishes_text if before_dishes_text else "未识别到具体菜品"}
+
+要求：
+1. 对比餐前图片（第一张）和餐后图片（第二张）
+2. 估算每个菜品的剩余比例（0表示吃完，1表示没动）
+3. 计算整体剩余比例
+4. 给出简短的对比分析说明
+5. 只返回JSON，不要其他解释
+
+请分析图片："""
+            
+            response = self.ark_client.responses.create(
+                model="doubao-seed-1-6-251015",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "这是餐前的食物图片："
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": before_data_uri
+                            },
+                            {
+                                "type": "input_text",
+                                "text": "这是餐后的食物图片："
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": after_data_uri
+                            },
+                            {
+                                "type": "input_text",
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            )
+            
+            # 解析响应
+            content = None
+            if hasattr(response, 'output') and response.output:
+                output = response.output
+                if isinstance(output, list) and len(output) > 0:
+                    for item in output:
+                        if hasattr(item, 'content') and item.content:
+                            item_content = item.content
+                            if isinstance(item_content, list) and len(item_content) > 0:
+                                sub_item = item_content[0]
+                                if hasattr(sub_item, 'text') and sub_item.text:
+                                    content = sub_item.text
+                                    break
+            
+            if content:
+                result = self._parse_comparison_result(content)
+                # Phase 56: 记录成功的AI调用
+                _cmp_latency = int((time.time() - _cmp_start) * 1000)
+                self._log_ai_call(
+                    call_type="meal_comparison",
+                    model_name="doubao-seed-1-6-251015",
+                    input_summary="餐前餐后对比分析",
+                    success=True,
+                    latency_ms=_cmp_latency,
+                    output_summary=f"remaining={result.get('overall_remaining_ratio')}",
+                )
+                return result
+            else:
+                raise Exception("豆包AI返回空响应")
+                
+        except Exception as e:
+            # Phase 56: 记录失败的AI调用
+            _cmp_latency = int((time.time() - _cmp_start) * 1000)
+            self._log_ai_call(
+                call_type="meal_comparison",
+                model_name="doubao-seed-1-6-251015",
+                input_summary="餐前餐后对比分析",
+                success=False,
+                latency_ms=_cmp_latency,
+                error_message=str(e),
+            )
+            print(f"餐前餐后对比失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
+    
+    def _parse_comparison_result(self, content: str) -> dict:
+        """解析餐前餐后对比结果"""
+        try:
+            json_start = content.find('{')
+            json_end = content.rfind('}') + 1
+            
+            if json_start != -1 and json_end > json_start:
+                json_str = content[json_start:json_end]
+                data = json.loads(json_str)
+                
+                # 处理菜品剩余信息
+                dishes = data.get("dishes", [])
+                processed_dishes = []
+                for dish in dishes:
+                    processed_dish = {
+                        "name": dish.get("name", "未知菜品"),
+                        "remaining_ratio": float(dish.get("remaining_ratio", 0)),
+                        "remaining_weight": int(dish.get("remaining_weight", 0))
+                    }
+                    # 确保比例在0-1范围内
+                    processed_dish["remaining_ratio"] = max(0, min(1, processed_dish["remaining_ratio"]))
+                    processed_dishes.append(processed_dish)
+                
+                overall_remaining_ratio = float(data.get("overall_remaining_ratio", 0))
+                # 确保比例在0-1范围内
+                overall_remaining_ratio = max(0, min(1, overall_remaining_ratio))
+                
+                # 计算消耗比例
+                consumption_ratio = 1 - overall_remaining_ratio
+                
+                result = {
+                    "dishes": processed_dishes,
+                    "overall_remaining_ratio": round(overall_remaining_ratio, 4),
+                    "consumption_ratio": round(consumption_ratio, 4),
+                    "comparison_analysis": data.get("comparison_analysis", "对比分析完成")
+                }
+                
+                return result
+            else:
+                raise ValueError("未找到JSON数据")
+                
+        except Exception as e:
+            print(f"解析对比结果失败: {str(e)}")
+            print(f"原始内容: {content}")
+            # 返回默认结果（假设吃掉了一半）
+            return {
+                "dishes": [],
+                "overall_remaining_ratio": 0.5,
+                "consumption_ratio": 0.5,
+                "comparison_analysis": "无法准确分析，默认估算您吃掉了约50%的食物。"
+            }
+
     def _generate_recommendation(self, nutrition_data: dict, health_goal: Optional[str] = None) -> Tuple[bool, str]:
         """
         根据营养数据和健康目标生成推荐理由
