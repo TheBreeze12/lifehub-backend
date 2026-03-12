@@ -1,7 +1,7 @@
 """
 行程计划表模型
 """
-from sqlalchemy import Column, Integer, String, Date, TIMESTAMP, JSON, Float
+from sqlalchemy import Column, Integer,ForeignKey, String, Date, TIMESTAMP, JSON, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -10,9 +10,9 @@ from app.database import Base
 class TripPlan(Base):
     """行程计划表"""
     __tablename__ = "trip_plan"
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True, comment="行程ID")
-    user_id = Column(Integer, nullable=False, comment="用户ID")
+    user_id = Column(Integer,  ForeignKey("user.id", ondelete="CASCADE"),nullable=False, comment="用户ID")
     title = Column(String(100), nullable=False, comment="运动计划标题（原为行程标题）")
     destination = Column(String(50), comment="运动区域/起点（原为目的地）")
     latitude = Column(Float, comment="用户生成计划时的位置纬度（可选）")
@@ -28,10 +28,10 @@ class TripPlan(Base):
         comment="状态: planning/ongoing/done"
     )
     created_at = Column(TIMESTAMP, server_default=func.now(), comment="创建时间")
-    
+
     # 关联关系
     items = relationship("TripItem", back_populates="trip", cascade="all, delete-orphan")
-    
+    user = relationship("User", backref="trip_plans")
+
     def __repr__(self):
         return f"<TripPlan(id={self.id}, title={self.title})>"
-
