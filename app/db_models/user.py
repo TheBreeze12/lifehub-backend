@@ -9,7 +9,7 @@ from app.database import Base
 class User(Base):
     """用户表"""
     __tablename__ = "user"
-    
+
     id = Column(Integer, primary_key=True, autoincrement=True, comment="用户ID")
     nickname = Column(String(50), default="健康达人", comment="用户昵称")
     password = Column(String(128), nullable=False, comment="用户密码")
@@ -33,7 +33,6 @@ class User(Base):
         onupdate=func.now(),
         comment="更新时间"
     )
-    
+
     def __repr__(self):
         return f"<User(id={self.id}, nickname={self.nickname})>"
-

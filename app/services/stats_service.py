@@ -17,15 +17,18 @@ Phase 51: 运动频率分析
 - 根据用户健康目标计算多维度达成率（Phase 36新增）
 - 统计运动频率、类型分布、评级与建议（Phase 51新增）
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
 from typing import Optional, List
 
-from app.db_models.diet_record import DietRecord
-from app.db_models.trip_plan import TripPlan
-from app.db_models.trip_item import TripItem
-from app.db_models.exercise_record import ExerciseRecord
+from app.crud import (
+    diet_record_crud,
+    exercise_record_crud,
+    trip_item_crud,
+    trip_plan_crud,
+    user_crud,
+)
 from app.db_models.user import User
 from app.models.stats import (
     DailyCalorieStats, WeeklyCalorieStats, DailyBreakdown,
@@ -39,32 +42,29 @@ from app.models.stats import (
 
 class StatsService:
     """统计服务类"""
-    
+
     def get_daily_calorie_stats(
-        self, 
-        db: Session, 
-        user_id: int, 
+        self,
+        db: Session,
+        user_id: int,
         target_date: date
     ) -> DailyCalorieStats:
         """
         获取指定日期的热量统计
-        
+
         Args:
             db: 数据库会话
             user_id: 用户ID
             target_date: 目标日期
-            
+
         Returns:
             DailyCalorieStats: 每日热量统计数据
         """
         # 查询饮食记录
-        diet_records = db.query(DietRecord).filter(
-            and_(
-                DietRecord.user_id == user_id,
-                DietRecord.record_date == target_date
-            )
-        ).all()
-        
+        diet_records = diet_record_crud.get_diet_records_by_user_and_date(
+            db, user_id, target_date
+        )
+
         # 计算摄入热量
         intake_calories = 0.0
         meal_count = len(diet_records)
@@ -74,11 +74,11 @@ class StatsService:
             "dinner": 0.0,
             "snack": 0.0
         }
-        
+
         for record in diet_records:
             calories = record.calories or 0.0
             intake_calories += calories
-            
+
             # 餐次分类统计
             meal_type = (record.meal_type or "").lower()
             # 支持中文餐次名称转换
@@ -90,69 +90,60 @@ class StatsService:
             }
             if meal_type in meal_type_map:
                 meal_type = meal_type_map[meal_type]
-            
+
             if meal_type in meal_breakdown:
                 meal_breakdown[meal_type] += calories
-        
+
         # 查询当日运动计划（计划消耗）
-        trip_plans = db.query(TripPlan).filter(
-            and_(
-                TripPlan.user_id == user_id,
-                TripPlan.start_date <= target_date,
-                TripPlan.end_date >= target_date
-            )
-        ).all()
-        
+        trip_plans = trip_plan_crud.get_trip_plans_covering_date(
+            db, user_id, target_date
+        )
+
         # 计算计划消耗热量
         planned_burn_calories = 0.0
         exercise_count = 0
         exercise_duration = 0
-        
+
         for trip in trip_plans:
-            items = db.query(TripItem).filter(
-                TripItem.trip_id == trip.id
-            ).all()
-            
+            items = trip_item_crud.get_trip_items_by_trip_id(db, trip.id)
+
             for item in items:
                 if item.cost:
                     planned_burn_calories += item.cost
                 exercise_count += 1
                 if item.duration:
                     exercise_duration += item.duration
-        
+
         # Phase 26: 查询当日运动记录（实际消耗）
-        exercise_records = db.query(ExerciseRecord).filter(
-            and_(
-                ExerciseRecord.user_id == user_id,
-                ExerciseRecord.exercise_date == target_date
-            )
-        ).all()
-        
+        exercise_records = exercise_record_crud.get_exercise_records_by_date(
+            db, user_id, target_date
+        )
+
         actual_burn_calories = 0.0
         actual_exercise_count = len(exercise_records)
         actual_exercise_duration = 0
-        
+
         for record in exercise_records:
             actual_burn_calories += record.actual_calories or 0.0
             actual_exercise_duration += record.actual_duration or 0
-        
+
         # 有效消耗：有运动记录时用实际值，否则用计划值
         if actual_exercise_count > 0:
             burn_calories = actual_burn_calories
         else:
             burn_calories = planned_burn_calories
-        
+
         # 计算净热量和热量缺口
         net_calories = intake_calories - burn_calories
         calorie_deficit = net_calories  # 正值=热量盈余，负值=热量亏缺
-        
+
         # 计算目标达成率
         goal_achievement_rate = None
         if planned_burn_calories > 0:
             goal_achievement_rate = round(
                 (actual_burn_calories / planned_burn_calories) * 100, 1
             )
-        
+
         return DailyCalorieStats(
             date=target_date.isoformat(),
             user_id=user_id,
@@ -170,7 +161,7 @@ class StatsService:
             goal_achievement_rate=goal_achievement_rate,
             meal_breakdown=meal_breakdown
         )
-    
+
     def get_weekly_calorie_stats(
         self,
         db: Session,
@@ -179,17 +170,17 @@ class StatsService:
     ) -> WeeklyCalorieStats:
         """
         获取指定周的热量统计
-        
+
         Args:
             db: 数据库会话
             user_id: 用户ID
             week_start: 周起始日期（应为周一）
-            
+
         Returns:
             WeeklyCalorieStats: 每周热量统计数据
         """
         week_end = week_start + timedelta(days=6)
-        
+
         # 初始化统计变量
         total_intake = 0.0
         total_burn = 0.0
@@ -197,24 +188,24 @@ class StatsService:
         total_exercises = 0
         active_days = 0
         daily_breakdown = []
-        
+
         # 遍历一周中的每一天
         for i in range(7):
             current_date = week_start + timedelta(days=i)
-            
+
             # 获取当日统计
             daily_stats = self.get_daily_calorie_stats(db, user_id, current_date)
-            
+
             # 累加总计
             total_intake += daily_stats.intake_calories
             total_burn += daily_stats.burn_calories
             total_meals += daily_stats.meal_count
             total_exercises += daily_stats.exercise_count
-            
+
             # 判断是否有记录
             if daily_stats.meal_count > 0 or daily_stats.exercise_count > 0:
                 active_days += 1
-            
+
             # 添加每日明细
             daily_breakdown.append(DailyBreakdown(
                 date=current_date.isoformat(),
@@ -222,13 +213,13 @@ class StatsService:
                 burn_calories=daily_stats.burn_calories,
                 net_calories=daily_stats.net_calories
             ))
-        
+
         # 计算平均值（避免除零）
         days_for_avg = active_days if active_days > 0 else 1
         avg_intake = total_intake / days_for_avg
         avg_burn = total_burn / days_for_avg
         avg_net = (total_intake - total_burn) / days_for_avg
-        
+
         return WeeklyCalorieStats(
             week_start=week_start.isoformat(),
             week_end=week_end.isoformat(),
@@ -247,19 +238,19 @@ class StatsService:
 
 
     # ============== Phase 16: 营养素统计方法 ==============
-    
+
     def _create_nutrient_comparison(
-        self, 
-        nutrient_key: str, 
+        self,
+        nutrient_key: str,
         actual_ratio: float
     ) -> NutrientComparison:
         """
         创建营养素与膳食指南对比结果
-        
+
         Args:
             nutrient_key: 营养素键名（protein/fat/carbs）
             actual_ratio: 实际占比（%）
-            
+
         Returns:
             NutrientComparison: 对比结果
         """
@@ -267,7 +258,7 @@ class StatsService:
         min_val = guideline["min"]
         max_val = guideline["max"]
         name = guideline["name"]
-        
+
         # 判断状态
         if actual_ratio < min_val:
             status = "low"
@@ -278,7 +269,7 @@ class StatsService:
         else:
             status = "normal"
             message = f"{name}摄入在建议范围内"
-        
+
         return NutrientComparison(
             actual_ratio=round(actual_ratio, 1),
             recommended_min=min_val,
@@ -286,7 +277,7 @@ class StatsService:
             status=status,
             message=message
         )
-    
+
     def get_daily_nutrient_stats(
         self,
         db: Session,
@@ -295,33 +286,30 @@ class StatsService:
     ) -> DailyNutrientStats:
         """
         获取指定日期的营养素统计
-        
+
         统计蛋白质、脂肪、碳水化合物的摄入量和占比，
         并与《中国居民膳食指南2022》建议值对比。
-        
+
         Args:
             db: 数据库会话
             user_id: 用户ID
             target_date: 目标日期
-            
+
         Returns:
             DailyNutrientStats: 每日营养素统计数据
         """
         # 查询饮食记录
-        diet_records = db.query(DietRecord).filter(
-            and_(
-                DietRecord.user_id == user_id,
-                DietRecord.record_date == target_date
-            )
-        ).all()
-        
+        diet_records = diet_record_crud.get_diet_records_by_user_and_date(
+            db, user_id, target_date
+        )
+
         # 初始化统计变量
         total_protein = 0.0
         total_fat = 0.0
         total_carbs = 0.0
         total_calories = 0.0
         meal_count = len(diet_records)
-        
+
         # 餐次分类统计
         meal_breakdown = {
             "breakfast": {"protein": 0.0, "fat": 0.0, "carbs": 0.0, "calories": 0.0},
@@ -329,7 +317,7 @@ class StatsService:
             "dinner": {"protein": 0.0, "fat": 0.0, "carbs": 0.0, "calories": 0.0},
             "snack": {"protein": 0.0, "fat": 0.0, "carbs": 0.0, "calories": 0.0}
         }
-        
+
         # 餐次名称映射
         meal_type_map = {
             "早餐": "breakfast",
@@ -337,38 +325,38 @@ class StatsService:
             "晚餐": "dinner",
             "加餐": "snack"
         }
-        
+
         # 遍历记录，累加营养素
         for record in diet_records:
             protein = record.protein or 0.0
             fat = record.fat or 0.0
             carbs = record.carbs or 0.0
             calories = record.calories or 0.0
-            
+
             total_protein += protein
             total_fat += fat
             total_carbs += carbs
             total_calories += calories
-            
+
             # 餐次分类
             meal_type = (record.meal_type or "").lower()
             if meal_type in meal_type_map:
                 meal_type = meal_type_map[meal_type]
-            
+
             if meal_type in meal_breakdown:
                 meal_breakdown[meal_type]["protein"] += protein
                 meal_breakdown[meal_type]["fat"] += fat
                 meal_breakdown[meal_type]["carbs"] += carbs
                 meal_breakdown[meal_type]["calories"] += calories
-        
+
         # 计算各营养素提供的热量
         protein_calories = total_protein * PROTEIN_KCAL_PER_GRAM
         fat_calories = total_fat * FAT_KCAL_PER_GRAM
         carbs_calories = total_carbs * CARBS_KCAL_PER_GRAM
-        
+
         # 计算营养素热量总和（用于计算占比）
         total_nutrient_calories = protein_calories + fat_calories + carbs_calories
-        
+
         # 计算营养素占比
         if total_nutrient_calories > 0:
             protein_ratio = (protein_calories / total_nutrient_calories) * 100
@@ -378,7 +366,7 @@ class StatsService:
             protein_ratio = 0.0
             fat_ratio = 0.0
             carbs_ratio = 0.0
-        
+
         # 创建膳食指南对比
         if total_nutrient_calories > 0:
             guidelines_comparison = GuidelinesComparison(
@@ -411,13 +399,13 @@ class StatsService:
                     message="暂无数据"
                 )
             )
-        
+
         # 清理meal_breakdown中的空餐次
         cleaned_meal_breakdown = {
             k: v for k, v in meal_breakdown.items()
             if v["calories"] > 0
         }
-        
+
         return DailyNutrientStats(
             date=target_date.isoformat(),
             user_id=user_id,
@@ -466,19 +454,13 @@ class StatsService:
         streak = 0
         current = end_date
         while True:
-            has_diet = db.query(DietRecord).filter(
-                and_(
-                    DietRecord.user_id == user_id,
-                    DietRecord.record_date == current
-                )
-            ).first() is not None
+            has_diet = diet_record_crud.has_diet_record_on_date(
+                db, user_id, current
+            )
 
-            has_exercise = db.query(ExerciseRecord).filter(
-                and_(
-                    ExerciseRecord.user_id == user_id,
-                    ExerciseRecord.exercise_date == current
-                )
-            ).first() is not None
+            has_exercise = exercise_record_crud.has_exercise_record_on_date(
+                db, user_id, current
+            )
 
             if has_diet or has_exercise:
                 streak += 1
@@ -510,9 +492,9 @@ class StatsService:
             d = start_date + timedelta(days=i)
 
             # 饮食
-            diet_records = db.query(DietRecord).filter(
-                and_(DietRecord.user_id == user_id, DietRecord.record_date == d)
-            ).all()
+            diet_records = diet_record_crud.get_diet_records_by_user_and_date(
+                db, user_id, d
+            )
             if diet_records:
                 days_with_diet += 1
             for r in diet_records:
@@ -522,9 +504,9 @@ class StatsService:
                 sum_carbs += r.carbs or 0.0
 
             # 运动记录（实际）
-            ex_records = db.query(ExerciseRecord).filter(
-                and_(ExerciseRecord.user_id == user_id, ExerciseRecord.exercise_date == d)
-            ).all()
+            ex_records = exercise_record_crud.get_exercise_records_by_date(
+                db, user_id, d
+            )
             if ex_records:
                 days_with_exercise += 1
             for er in ex_records:
@@ -532,15 +514,9 @@ class StatsService:
                 sum_exercise_duration += er.actual_duration or 0
 
             # 运动计划（计划消耗）
-            plans = db.query(TripPlan).filter(
-                and_(
-                    TripPlan.user_id == user_id,
-                    TripPlan.start_date <= d,
-                    TripPlan.end_date >= d
-                )
-            ).all()
+            plans = trip_plan_crud.get_trip_plans_covering_date(db, user_id, d)
             for p in plans:
-                items = db.query(TripItem).filter(TripItem.trip_id == p.id).all()
+                items = trip_item_crud.get_trip_items_by_trip_id(db, p.id)
                 for item in items:
                     sum_planned_burn += item.cost or 0.0
 
@@ -943,7 +919,7 @@ class StatsService:
         end_date = today
 
         # 获取用户信息
-        user = db.query(User).filter(User.id == user_id).first()
+        user = user_crud.get_user_by_id(db, user_id)
         health_goal = (user.health_goal if user and user.health_goal else "balanced")
         if health_goal not in HEALTH_GOAL_LABELS:
             health_goal = "balanced"
@@ -1062,13 +1038,9 @@ class StatsService:
             period_label = "最近一周"
 
         # 查询周期内所有运动记录
-        records = db.query(ExerciseRecord).filter(
-            and_(
-                ExerciseRecord.user_id == user_id,
-                ExerciseRecord.exercise_date >= start_date,
-                ExerciseRecord.exercise_date <= today
-            )
-        ).order_by(ExerciseRecord.exercise_date).all()
+        records = exercise_record_crud.get_exercise_records_between(
+            db, user_id, start_date, today
+        )
 
         # 按日期聚合
         daily_map: dict = {}
@@ -1173,3 +1145,252 @@ class StatsService:
 
 # 创建单例实例
 stats_service = StatsService()
+
+
+def parse_date(date_str: str) -> date:
+    try:
+        return datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"日期格式错误，请使用 YYYY-MM-DD 格式，收到: {date_str}",
+        )
+
+
+def get_daily_calorie_stats(db: Session, user_id: int, date_str: str):
+    target_date = parse_date(date_str)
+
+    user = user_crud.get_user_by_id(db, user_id)
+    if not user:
+        from app.models.stats import DailyCalorieStats
+
+        empty_stats = DailyCalorieStats(
+            date=date_str,
+            user_id=user_id,
+            intake_calories=0.0,
+            meal_count=0,
+            burn_calories=0.0,
+            exercise_count=0,
+            exercise_duration=0,
+            planned_burn_calories=0.0,
+            actual_burn_calories=0.0,
+            actual_exercise_count=0,
+            actual_exercise_duration=0,
+            net_calories=0.0,
+            calorie_deficit=0.0,
+            goal_achievement_rate=None,
+            meal_breakdown=None,
+        )
+        from app.models.stats import DailyCalorieStatsResponse
+
+        return DailyCalorieStatsResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_stats,
+        )
+
+    stats = stats_service.get_daily_calorie_stats(db, user_id, target_date)
+    from app.models.stats import DailyCalorieStatsResponse
+
+    return DailyCalorieStatsResponse(code=200, message="获取成功", data=stats)
+
+
+def get_weekly_calorie_stats(db: Session, user_id: int, week_start: str):
+    start_date = parse_date(week_start)
+
+    user = user_crud.get_user_by_id(db, user_id)
+    if not user:
+        from app.models.stats import WeeklyCalorieStats, DailyBreakdown
+
+        week_end = start_date + timedelta(days=6)
+        empty_breakdown = [
+            DailyBreakdown(
+                date=(start_date + timedelta(days=i)).isoformat(),
+                intake_calories=0.0,
+                burn_calories=0.0,
+                net_calories=0.0,
+            )
+            for i in range(7)
+        ]
+        empty_stats = WeeklyCalorieStats(
+            week_start=week_start,
+            week_end=week_end.isoformat(),
+            user_id=user_id,
+            total_intake=0.0,
+            total_burn=0.0,
+            total_net=0.0,
+            avg_intake=0.0,
+            avg_burn=0.0,
+            avg_net=0.0,
+            total_meals=0,
+            total_exercises=0,
+            active_days=0,
+            daily_breakdown=empty_breakdown,
+        )
+        from app.models.stats import WeeklyCalorieStatsResponse
+
+        return WeeklyCalorieStatsResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_stats,
+        )
+
+    stats = stats_service.get_weekly_calorie_stats(db, user_id, start_date)
+    from app.models.stats import WeeklyCalorieStatsResponse
+
+    return WeeklyCalorieStatsResponse(code=200, message="获取成功", data=stats)
+
+
+def get_daily_nutrient_stats(db: Session, user_id: int, date_str: str):
+    target_date = parse_date(date_str)
+
+    user = user_crud.get_user_by_id(db, user_id)
+    if not user:
+        from app.models.stats import GuidelinesComparison, NutrientComparison, DIETARY_GUIDELINES
+
+        empty_comparison = GuidelinesComparison(
+            protein=NutrientComparison(
+                actual_ratio=0.0,
+                recommended_min=DIETARY_GUIDELINES["protein"]["min"],
+                recommended_max=DIETARY_GUIDELINES["protein"]["max"],
+                status="low",
+                message="暂无数据",
+            ),
+            fat=NutrientComparison(
+                actual_ratio=0.0,
+                recommended_min=DIETARY_GUIDELINES["fat"]["min"],
+                recommended_max=DIETARY_GUIDELINES["fat"]["max"],
+                status="low",
+                message="暂无数据",
+            ),
+            carbs=NutrientComparison(
+                actual_ratio=0.0,
+                recommended_min=DIETARY_GUIDELINES["carbs"]["min"],
+                recommended_max=DIETARY_GUIDELINES["carbs"]["max"],
+                status="low",
+                message="暂无数据",
+            ),
+        )
+        empty_stats = DailyNutrientStats(
+            date=date_str,
+            user_id=user_id,
+            total_protein=0.0,
+            total_fat=0.0,
+            total_carbs=0.0,
+            total_calories=0.0,
+            protein_calories=0.0,
+            fat_calories=0.0,
+            carbs_calories=0.0,
+            protein_ratio=0.0,
+            fat_ratio=0.0,
+            carbs_ratio=0.0,
+            meal_count=0,
+            meal_breakdown=None,
+            guidelines_comparison=empty_comparison,
+        )
+        from app.models.stats import DailyNutrientStatsResponse
+
+        return DailyNutrientStatsResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_stats,
+        )
+
+    stats = stats_service.get_daily_nutrient_stats(db, user_id, target_date)
+    from app.models.stats import DailyNutrientStatsResponse
+
+    return DailyNutrientStatsResponse(code=200, message="获取成功", data=stats)
+
+
+def get_goal_progress(db: Session, user_id: int, days: int):
+    user = user_crud.get_user_by_id(db, user_id)
+    if not user:
+        today = date.today()
+        start = today - timedelta(days=max(days - 1, 0))
+        empty_data = GoalProgressData(
+            user_id=user_id,
+            health_goal="balanced",
+            health_goal_label="均衡",
+            period_days=days,
+            start_date=start.isoformat(),
+            end_date=today.isoformat(),
+            overall_score=0.0,
+            overall_status="poor",
+            dimensions=[],
+            suggestions=["用户不存在或尚未设置健康目标"],
+            streak_days=0,
+        )
+        from app.models.stats import GoalProgressResponse
+
+        return GoalProgressResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_data,
+        )
+
+    progress = stats_service.get_goal_progress(db, user_id, days)
+    from app.models.stats import GoalProgressResponse
+
+    return GoalProgressResponse(code=200, message="获取成功", data=progress)
+
+
+def get_exercise_frequency(db: Session, user_id: int, period: str):
+    if period not in ("week", "month"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"period参数错误，仅支持 week 或 month，收到: {period}",
+        )
+
+    user = user_crud.get_user_by_id(db, user_id)
+    if not user:
+        today = date.today()
+        if period == "month":
+            start = today - timedelta(days=29)
+            total_days = 30
+            period_label = "最近一个月"
+        else:
+            start = today - timedelta(days=6)
+            total_days = 7
+            period_label = "最近一周"
+
+        from app.models.stats import DailyExerciseFrequency, ExerciseFrequencyResponse
+
+        daily_data = [
+            DailyExerciseFrequency(
+                date=(start + timedelta(days=i)).isoformat(),
+                count=0,
+                total_duration=0,
+                total_calories=0.0,
+                exercise_types=[],
+            )
+            for i in range(total_days)
+        ]
+        empty_data = ExerciseFrequencyData(
+            user_id=user_id,
+            period=period,
+            period_label=period_label,
+            start_date=start.isoformat(),
+            end_date=today.isoformat(),
+            total_days=total_days,
+            active_days=0,
+            total_exercise_count=0,
+            total_duration=0,
+            total_calories=0.0,
+            avg_frequency=0.0,
+            avg_duration_per_session=0.0,
+            avg_calories_per_session=0.0,
+            daily_data=daily_data,
+            type_distribution=[],
+            frequency_rating="insufficient",
+            frequency_suggestion="暂无运动数据，建议开始规律运动",
+        )
+        return ExerciseFrequencyResponse(
+            code=200,
+            message="获取成功（用户无记录）",
+            data=empty_data,
+        )
+
+    frequency_data = stats_service.get_exercise_frequency(db, user_id, period)
+    from app.models.stats import ExerciseFrequencyResponse
+
+    return ExerciseFrequencyResponse(code=200, message="获取成功", data=frequency_data)

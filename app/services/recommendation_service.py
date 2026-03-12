@@ -9,13 +9,12 @@ Phase 41: 基于健康目标匹配 + 热量配额过滤 + 历史偏好排序的�
 4. 多因子评分：健康目标匹配 + 热量配额适配 + 历史偏好加分 + 过敏原过滤
 5. 排序并生成透明推荐理由
 """
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
 
+from app.crud import diet_record_crud, user_crud
 from app.db_models.user import User
-from app.db_models.diet_record import DietRecord
 from app.models.food import RecommendedFood, RecommendationData
 
 
@@ -189,42 +188,20 @@ class RecommendationService:
     def _get_today_intake(self, db: Session, user_id: int) -> float:
         """获取用户今日已摄入热量总和"""
         today = date.today()
-        result = db.query(func.sum(DietRecord.calories)).filter(
-            and_(
-                DietRecord.user_id == user_id,
-                DietRecord.record_date == today
-            )
-        ).scalar()
-        return float(result) if result else 0.0
+        return diet_record_crud.get_today_intake_calories(db, user_id, today)
 
     def _get_history_food_counts(self, db: Session, user_id: int, days: int = 30) -> dict:
         """
         获取用户历史饮食偏好（最近N天的菜品出现次数）
         返回 {food_name: count} 字典
         """
-        since = date.today() - __import__('datetime').timedelta(days=days)
-        records = db.query(
-            DietRecord.food_name,
-            func.count(DietRecord.id).label("cnt")
-        ).filter(
-            and_(
-                DietRecord.user_id == user_id,
-                DietRecord.record_date >= since
-            )
-        ).group_by(DietRecord.food_name).all()
-
-        return {r.food_name: r.cnt for r in records}
+        since = date.today() - timedelta(days=days)
+        return diet_record_crud.get_history_food_counts(db, user_id, since)
 
     def _get_today_eaten_foods(self, db: Session, user_id: int) -> set:
         """获取今天已经吃过的菜品名称集合，用于去重"""
         today = date.today()
-        records = db.query(DietRecord.food_name).filter(
-            and_(
-                DietRecord.user_id == user_id,
-                DietRecord.record_date == today
-            )
-        ).all()
-        return {r.food_name for r in records}
+        return diet_record_crud.get_today_eaten_foods(db, user_id, today)
 
     def _generate_tags(self, food: dict) -> list:
         """根据菜品营养数据生成标签"""
@@ -459,7 +436,7 @@ class RecommendationService:
             ValueError: 用户不存在时抛出
         """
         # 1. 获取用户信息
-        user = db.query(User).filter(User.id == user_id).first()
+        user = user_crud.get_user_by_id(db, user_id)
         if not user:
             raise ValueError(f"用户不存在，user_id: {user_id}")
 

@@ -45,9 +45,9 @@ async def lifespan(app: FastAPI):
             print(f"⚠️  数据库表初始化警告: {e}")
     else:
         print("⚠️  警告：数据库连接失败，请检查配置")
-    
+
     yield  # 应用运行期间
-    
+
     # 关闭时执行（如果需要清理资源，在这里添加）
     print("🛑 应用关闭中...")
 
@@ -115,7 +115,7 @@ async def health_check():
 if __name__ == "__main__":
     import uvicorn
     import sys
-    
+
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", 8000))
     # 在打包为可执行文件（PyInstaller）时禁用 reload，避免不停重载
@@ -128,11 +128,10 @@ if __name__ == "__main__":
         print("⚙️ RELOAD=0，禁用自动重载 reload")
     elif env_reload == "1":
         print("⚙️ RELOAD=1，启用自动重载 reload")
-    
+
     uvicorn.run(
         app=app,
         host=host,
         port=port,
         reload=reload_enabled
     )
-

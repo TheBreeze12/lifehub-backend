@@ -1,11 +1,9 @@
 """
 行程相关API路由
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime, date, time
 from typing import Optional, List
-from fastapi.responses import FileResponse
 from app.models.trip import (
     GenerateTripRequest,
     GenerateTripResponse,
@@ -29,22 +27,9 @@ from app.models.trip import (
     TileBounds,
 )
 from app.database import get_db
-from app.db_models.trip_plan import TripPlan
-from app.db_models.trip_item import TripItem
-from app.db_models.user import User
-from app.services.ai_service import AIService
-from app.services.mets_service import METsService
-from app.services.route_optimization_service import get_route_optimization_service
-from app.services.weather_service import WeatherService
-from app.services.offline_package_service import OfflinePackageService
+from app.services import trip_service
 
 router = APIRouter(prefix="/api/trip", tags=["运动规划"])
-
-# 初始化AI服务、METs服务和天气服务
-ai_service = AIService()
-mets_service = METsService()
-weather_service = WeatherService()
-offline_package_service = OfflinePackageService()
 
 
 @router.post("/generate", response_model=GenerateTripResponse)
@@ -54,219 +39,18 @@ async def generate_trip(
 ):
     """
     生成运动计划（餐后运动规划）
-    
+
     - **userId**: 用户ID
     - **query**: 用户查询文本（如"规划餐后运动，消耗300卡路里"）
     - **preferences**: 用户偏好（健康目标、过敏原等）
     - **latitude**: 用户当前位置纬度（可选）
     - **longitude**: 用户当前位置经度（可选）
     """
-    try:
-        # 准备偏好数据
-        preferences_dict = None
-        if request.preferences:
-            preferences_dict = {
-                "healthGoal": request.preferences.healthGoal,
-                "allergens": request.preferences.allergens or []
-            }
-        
-        # 获取用户信息（体重等，用于METs计算）
-        user = db.query(User).filter(User.id == request.userId).first()
-        user_weight = user.weight if user and user.weight else mets_service.DEFAULT_WEIGHT_KG
-        
-        # 获取用户今日饮食记录（计算已摄入卡路里）
-        from app.db_models.diet_record import DietRecord
-        from datetime import date
-        today = date.today()
-        today_records = db.query(DietRecord).filter(
-            DietRecord.user_id == request.userId,
-            DietRecord.record_date == today
-        ).all()
-        total_calories_intake = sum(record.calories for record in today_records)
-        
-        # 准备位置信息
-        user_location = None
-        if request.latitude is not None and request.longitude is not None:
-            user_location = {
-                "latitude": request.latitude,
-                "longitude": request.longitude
-            }
-        
-        # 调用AI服务生成运动计划
-        trip_data = ai_service.generate_trip(
-            query=request.query,
-            preferences=preferences_dict,
-            calories_intake=total_calories_intake,
-            user_location=user_location
-        )
-        
-        # 解析日期
-        start_date = datetime.strptime(trip_data["startDate"], "%Y-%m-%d").date()
-        end_date = datetime.strptime(trip_data["endDate"], "%Y-%m-%d").date()
-        
-        # 创建行程计划记录
-        trip_plan = TripPlan(
-            user_id=request.userId,
-            title=trip_data.get("title", "行程计划"),
-            destination=trip_data.get("destination"),
-            latitude=user_location.get("latitude") if user_location else None,
-            longitude=user_location.get("longitude") if user_location else None,
-            start_date=start_date,
-            end_date=end_date,
-            travelers=trip_data.get("travelers", ["本人"]),
-            status="planning"
-        )
-        
-        db.add(trip_plan)
-        db.flush()  # 获取trip_plan.id
-        
-        # 创建运动节点（使用METs精准计算热量消耗）
-        items = trip_data.get("items", [])
-        for index, item_data in enumerate(items):
-            # 解析时间
-            start_time_obj = None
-            if item_data.get("startTime"):
-                try:
-                    time_parts = item_data["startTime"].split(":")
-                    start_time_obj = time(int(time_parts[0]), int(time_parts[1]))
-                except:
-                    pass
-            
-            # 使用METs公式精准计算热量消耗（Phase 19新增）
-            # 公式：消耗(kcal) = METs × 体重(kg) × 时间(h)
-            exercise_type = item_data.get("placeType") or "walking"
-            duration_minutes = item_data.get("duration") or 0
-            
-            # 使用METs服务计算精准热量
-            calories_burned = mets_service.calculate_calories(
-                exercise_type=exercise_type,
-                weight_kg=user_weight,
-                duration_minutes=duration_minutes
-            )
-            
-            # 获取METs值用于记录计算依据
-            mets_value = mets_service.get_mets_value(exercise_type)
-            
-            # 构建包含METs计算依据的备注
-            original_notes = item_data.get("notes") or ""
-            mets_note = f"[METs={mets_value}, 体重={user_weight}kg, 时长={duration_minutes}分钟]"
-            enhanced_notes = f"{original_notes} {mets_note}" if original_notes else mets_note
-            
-            trip_item = TripItem(
-                trip_id=trip_plan.id,
-                day_index=item_data.get("dayIndex", 1),
-                start_time=start_time_obj,
-                place_name=item_data.get("placeName", ""),
-                place_type=item_data.get("placeType"),
-                duration=item_data.get("duration"),
-                cost=calories_burned,  # 使用METs精准计算的热量消耗
-                notes=enhanced_notes,  # 包含METs计算依据
-                sort_order=index
-            )
-            db.add(trip_item)
-        
-        # 提交事务
-        db.commit()
-        db.refresh(trip_plan)
-        
-        # 构建响应数据
-        trip_items = db.query(TripItem).filter(TripItem.trip_id == trip_plan.id).order_by(TripItem.sort_order).all()
-        
-        items_data = []
-        for item in trip_items:
-            start_time_str = None
-            if item.start_time:
-                start_time_str = item.start_time.strftime("%H:%M")
-            
-            # 获取METs值和计算依据（Phase 19新增）
-            exercise_type = item.place_type or "walking"
-            mets_value = mets_service.get_mets_value(exercise_type)
-            duration_hours = (item.duration or 0) / 60.0
-            calculation_basis = f"METs={mets_value} × {user_weight}kg × {duration_hours:.2f}h"
-            
-            items_data.append(TripItemData(
-                dayIndex=item.day_index,
-                startTime=start_time_str,
-                placeName=item.place_name,
-                placeType=item.place_type,
-                duration=item.duration,
-                cost=item.cost,
-                notes=item.notes,
-                metsValue=mets_value,
-                calculationBasis=calculation_basis
-            ))
-        
-        trip_response = TripData(
-            tripId=trip_plan.id,
-            title=trip_plan.title,
-            destination=trip_plan.destination,
-            startDate=trip_plan.start_date.strftime("%Y-%m-%d"),
-            endDate=trip_plan.end_date.strftime("%Y-%m-%d"),
-            items=items_data
-        )
-        
-        return GenerateTripResponse(
-            code=200,
-            message="运动计划生成成功",
-            data=trip_response
-        )
-        
-    except ValueError as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=f"请求参数错误: {str(e)}")
-    except Exception as e:
-        db.rollback()
-        print(f"生成运动计划失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"生成运动计划失败: {str(e)}")
+    return trip_service.generate_trip(db, request)
 
 
-def _trip_plan_to_summary(trip_plan: TripPlan, item_count: int = 0) -> TripSummary:
-    """将TripPlan转换为TripSummary"""
-    return TripSummary(
-        tripId=trip_plan.id,
-        title=trip_plan.title,
-        destination=trip_plan.destination,
-        startDate=trip_plan.start_date.strftime("%Y-%m-%d"),
-        endDate=trip_plan.end_date.strftime("%Y-%m-%d"),
-        status=trip_plan.status,
-        itemCount=item_count
-    )
-
-
-def _trip_plan_to_data(trip_plan: TripPlan, trip_items: List[TripItem], user_weight: float = 70.0) -> TripData:
-    """将TripPlan和TripItems转换为TripData（包含METs计算信息）"""
-    items_data = []
-    for item in trip_items:
-        start_time_str = None
-        if item.start_time:
-            start_time_str = item.start_time.strftime("%H:%M")
-        
-        # 获取METs值和计算依据（Phase 19新增）
-        exercise_type = item.place_type or "walking"
-        mets_value = mets_service.get_mets_value(exercise_type)
-        duration_hours = (item.duration or 0) / 60.0
-        calculation_basis = f"METs={mets_value} × {user_weight}kg × {duration_hours:.2f}h"
-        
-        items_data.append(TripItemData(
-            dayIndex=item.day_index,
-            startTime=start_time_str,
-            placeName=item.place_name,
-            placeType=item.place_type,
-            duration=item.duration,
-            cost=item.cost,
-            notes=item.notes,
-            metsValue=mets_value,
-            calculationBasis=calculation_basis
-        ))
-    
-    return TripData(
-        tripId=trip_plan.id,
-        title=trip_plan.title,
-        destination=trip_plan.destination,
-        startDate=trip_plan.start_date.strftime("%Y-%m-%d"),
-        endDate=trip_plan.end_date.strftime("%Y-%m-%d"),
-        items=items_data
-    )
+_trip_plan_to_summary = trip_service._trip_plan_to_summary
+_trip_plan_to_data = trip_service._trip_plan_to_data
 
 
 @router.get("/list", response_model=TripListResponse)
@@ -276,34 +60,10 @@ async def get_trip_list(
 ):
     """
     获取用户全部行程规划列表
-    
+
     - **userId**: 用户ID
     """
-    try:
-        # 查询用户的所有行程，按创建时间倒序
-        trip_plans = db.query(TripPlan).filter(
-            TripPlan.user_id == userId
-        ).order_by(TripPlan.created_at.desc()).all()
-        
-        # 转换为摘要格式
-        trip_summaries = []
-        for trip_plan in trip_plans:
-            # 统计节点数量
-            item_count = db.query(TripItem).filter(
-                TripItem.trip_id == trip_plan.id
-            ).count()
-            
-            trip_summaries.append(_trip_plan_to_summary(trip_plan, item_count))
-        
-        return TripListResponse(
-            code=200,
-            message="获取成功",
-            data=trip_summaries
-        )
-        
-    except Exception as e:
-        print(f"获取行程列表失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取行程列表失败: {str(e)}")
+    return trip_service.get_trip_list(db, userId)
 
 
 @router.get("/recent", response_model=TripListResponse)
@@ -314,35 +74,11 @@ async def get_recent_trips(
 ):
     """
     获取用户最近行程规划
-    
+
     - **userId**: 用户ID
     - **limit**: 返回数量限制（默认5条）
     """
-    try:
-        # 查询用户最近的行程，按创建时间倒序，限制数量
-        trip_plans = db.query(TripPlan).filter(
-            TripPlan.user_id == userId
-        ).order_by(TripPlan.created_at.desc()).limit(limit).all()
-        
-        # 转换为摘要格式
-        trip_summaries = []
-        for trip_plan in trip_plans:
-            # 统计节点数量
-            item_count = db.query(TripItem).filter(
-                TripItem.trip_id == trip_plan.id
-            ).count()
-            
-            trip_summaries.append(_trip_plan_to_summary(trip_plan, item_count))
-        
-        return TripListResponse(
-            code=200,
-            message="获取成功",
-            data=trip_summaries
-        )
-        
-    except Exception as e:
-        print(f"获取最近行程失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取最近行程失败: {str(e)}")
+    return trip_service.get_recent_trips(db, userId, limit)
 
 
 @router.get("/home", response_model=TripListResponse)
@@ -353,35 +89,11 @@ async def get_home_trips(
 ):
     """
     首页展示行程（最近的几个行程）
-    
+
     - **userId**: 用户ID
     - **limit**: 返回数量限制（默认3条）
     """
-    try:
-        # 查询用户最近的行程，按创建时间倒序，限制数量
-        trip_plans = db.query(TripPlan).filter(
-            TripPlan.user_id == userId
-        ).order_by(TripPlan.created_at.desc()).limit(limit).all()
-        
-        # 转换为摘要格式
-        trip_summaries = []
-        for trip_plan in trip_plans:
-            # 统计节点数量
-            item_count = db.query(TripItem).filter(
-                TripItem.trip_id == trip_plan.id
-            ).count()
-            
-            trip_summaries.append(_trip_plan_to_summary(trip_plan, item_count))
-        
-        return TripListResponse(
-            code=200,
-            message="获取成功",
-            data=trip_summaries
-        )
-        
-    except Exception as e:
-        print(f"获取首页行程失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取首页行程失败: {str(e)}")
+    return trip_service.get_home_trips(db, userId, limit)
 
 
 # ==================== Phase 32: 天气动态调整 Plan B 接口 ====================
@@ -400,104 +112,7 @@ async def get_plan_b(
 
     - **plan_id**: 运动计划ID
     """
-    try:
-        # 1. 查询运动计划
-        trip_plan = db.query(TripPlan).filter(TripPlan.id == plan_id).first()
-        if not trip_plan:
-            raise HTTPException(status_code=404, detail=f"运动计划不存在，plan_id: {plan_id}")
-
-        # 2. 获取用户体重
-        user = db.query(User).filter(User.id == trip_plan.user_id).first()
-        user_weight = user.weight if user and user.weight else mets_service.DEFAULT_WEIGHT_KG
-
-        # 3. 获取天气数据
-        weather_data = None
-        try:
-            if trip_plan.latitude is not None and trip_plan.longitude is not None:
-                weather_data = ai_service.get_weather_by_coords(
-                    trip_plan.latitude, trip_plan.longitude,
-                    address_hint=trip_plan.destination
-                )
-            elif trip_plan.destination:
-                weather_data = ai_service.get_weather_by_address(trip_plan.destination)
-        except Exception as weather_err:
-            print(f"获取天气失败: {weather_err}")
-
-        # 4. 评估天气
-        weather_eval = weather_service.evaluate_weather(weather_data)
-
-        # 构建天气评估模型
-        weather_assessment = WeatherAssessment(
-            is_bad_weather=weather_eval["is_bad_weather"],
-            severity=weather_eval["severity"],
-            description=weather_eval.get("description", ""),
-            temperature=weather_data.get("temperature") if weather_data else None,
-            windspeed=weather_data.get("windspeed") if weather_data else None,
-            weathercode=weather_data.get("weathercode") if weather_data else None,
-            recommendation=weather_eval.get("recommendation", ""),
-            warnings=weather_eval.get("warnings"),
-        )
-
-        # 5. 查询原计划运动项目
-        trip_items = db.query(TripItem).filter(
-            TripItem.trip_id == plan_id
-        ).order_by(TripItem.sort_order).all()
-
-        original_items = []
-        original_total_calories = 0.0
-        for item in trip_items:
-            item_dict = {
-                "place_name": item.place_name,
-                "place_type": item.place_type,
-                "duration": item.duration or 0,
-                "cost": item.cost or 0.0,
-            }
-            original_items.append(item_dict)
-            original_total_calories += item.cost or 0.0
-
-        # 6. 根据天气决定是否生成Plan B
-        need_plan_b = weather_eval["is_bad_weather"]
-        alternatives = []
-        plan_b_total_calories = 0.0
-        reason = ""
-
-        if need_plan_b:
-            plan_b_result = weather_service.generate_plan_b(original_items, weight_kg=user_weight)
-            reason = f"当前天气：{weather_eval.get('description', '不佳')}，{weather_eval.get('recommendation', '建议改为室内运动')}"
-
-            for alt in plan_b_result.get("alternatives", []):
-                alternatives.append(PlanBAlternative(
-                    exercise_name=alt["exercise_name"],
-                    exercise_type=alt["exercise_type"],
-                    duration=alt["duration"],
-                    calories=alt["calories"],
-                    is_indoor=alt["is_indoor"],
-                    description=alt["description"],
-                    mets_value=alt.get("mets_value"),
-                ))
-            plan_b_total_calories = plan_b_result.get("plan_b_total_calories", 0.0)
-        else:
-            reason = "当前天气适合户外运动，无需替代方案"
-
-        # 7. 构建响应
-        plan_b_data = PlanBData(
-            plan_id=plan_id,
-            weather=weather_assessment,
-            need_plan_b=need_plan_b,
-            original_calories=round(original_total_calories, 1),
-            alternatives=alternatives,
-            plan_b_total_calories=round(plan_b_total_calories, 1),
-            reason=reason,
-        )
-
-        message = "已生成室内替代方案" if need_plan_b else "天气良好，无需替代方案"
-        return PlanBResponse(code=200, message=message, data=plan_b_data)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"获取Plan B失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取Plan B失败: {str(e)}")
+    return trip_service.get_plan_b(db, plan_id)
 
 
 @router.get("/{tripId}", response_model=TripDetailResponse)
@@ -507,39 +122,10 @@ async def get_trip_detail(
 ):
     """
     获取某个行程的具体信息
-    
+
     - **tripId**: 行程ID
     """
-    try:
-        # 查询行程计划
-        trip_plan = db.query(TripPlan).filter(TripPlan.id == tripId).first()
-        
-        if not trip_plan:
-            raise HTTPException(status_code=404, detail=f"行程不存在，tripId: {tripId}")
-        
-        # 获取用户体重用于METs计算（Phase 19新增）
-        user = db.query(User).filter(User.id == trip_plan.user_id).first()
-        user_weight = user.weight if user and user.weight else mets_service.DEFAULT_WEIGHT_KG
-        
-        # 查询行程节点，按排序序号排序
-        trip_items = db.query(TripItem).filter(
-            TripItem.trip_id == tripId
-        ).order_by(TripItem.sort_order, TripItem.day_index, TripItem.start_time).all()
-        
-        # 转换为数据格式（包含METs计算信息）
-        trip_data = _trip_plan_to_data(trip_plan, trip_items, user_weight)
-        
-        return TripDetailResponse(
-            code=200,
-            message="获取成功",
-            data=trip_data
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"获取行程详情失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取行程详情失败: {str(e)}")
+    return trip_service.get_trip_detail(db, tripId)
 
 
 # ==================== Phase 22: 帕累托最优路径生成接口 ====================
@@ -550,12 +136,12 @@ async def generate_pareto_routes(
 ):
     """
     生成帕累托最优运动路径（2-3条）
-    
+
     基于NSGA-II多目标优化算法，同时优化：
     - 最短时间
     - 最大热量消耗
     - 最佳绿化评分
-    
+
     - **start_lat**: 起点纬度
     - **start_lng**: 起点经度
     - **target_calories**: 目标热量消耗（kcal）
@@ -563,71 +149,7 @@ async def generate_pareto_routes(
     - **exercise_type**: 运动类型（walking/running/cycling/jogging/hiking）
     - **weight_kg**: 用户体重（kg，默认70）
     """
-    try:
-        # 获取路径优化服务
-        route_service = get_route_optimization_service()
-        
-        # 生成帕累托最优路径
-        result = route_service.generate_pareto_routes(
-            start_point=(request.start_lat, request.start_lng),
-            target_calories=request.target_calories,
-            max_time_minutes=request.max_time_minutes or 60,
-            exercise_type=request.exercise_type or 'walking',
-            weight_kg=request.weight_kg or 70.0
-        )
-        
-        # 转换路径数据为Pydantic模型
-        routes_data = []
-        for route in result.get('routes', []):
-            # 转换路径点
-            waypoints = []
-            for wp in route.get('waypoints', []):
-                waypoints.append(RouteWaypoint(
-                    lat=wp['lat'],
-                    lng=wp['lng'],
-                    order=wp.get('order', 0),
-                    type=wp.get('type', 'waypoint')
-                ))
-            
-            routes_data.append(ParetoRoute(
-                route_id=route['route_id'],
-                route_name=route['route_name'],
-                time_minutes=route['time_minutes'],
-                calories_burn=route['calories_burn'],
-                greenery_score=min(route['greenery_score'], 100),  # 确保不超过100
-                distance_meters=route['distance_meters'],
-                waypoints=waypoints,
-                exercise_type=route.get('exercise_type'),
-                intensity=route.get('intensity')
-            ))
-        
-        # 构建响应数据
-        response_data = RoutesResponseData(
-            routes=routes_data,
-            start_point=RouteWaypoint(
-                lat=request.start_lat,
-                lng=request.start_lng,
-                order=0,
-                type='start'
-            ),
-            target_calories=request.target_calories,
-            max_time_minutes=request.max_time_minutes or 60,
-            exercise_type=request.exercise_type or 'walking',
-            weight_kg=request.weight_kg or 70.0,
-            n_routes=len(routes_data)
-        )
-        
-        return GenerateRoutesResponse(
-            code=200,
-            message="帕累托最优路径生成成功",
-            data=response_data
-        )
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"请求参数错误: {str(e)}")
-    except Exception as e:
-        print(f"生成帕累托路径失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"生成帕累托路径失败: {str(e)}")
+    return trip_service.generate_pareto_routes(request)
 
 
 # ==================== Phase 46: 离线运动包接口 ====================
@@ -645,60 +167,7 @@ async def generate_offline_package(
 
     - **plan_id**: 运动计划ID（必须大于0）
     """
-    try:
-        # 1. 查询运动计划
-        trip_plan = db.query(TripPlan).filter(TripPlan.id == request.plan_id).first()
-        if not trip_plan:
-            raise HTTPException(status_code=404, detail=f"运动计划不存在，plan_id: {request.plan_id}")
-
-        # 2. 查询运动项目
-        trip_items = db.query(TripItem).filter(
-            TripItem.trip_id == request.plan_id
-        ).order_by(TripItem.sort_order).all()
-
-        # 3. 生成离线包
-        result = offline_package_service.generate_package(trip_plan, trip_items)
-
-        # 4. 更新 trip_plan 的离线包标记
-        trip_plan.is_offline = 1
-        trip_plan.offline_size = result["file_size"]
-        db.commit()
-
-        # 5. 构建 tile_bounds 响应
-        pkg_info = offline_package_service.get_package_info(result["package_id"])
-        tile_bounds_data = None
-        if pkg_info and pkg_info.get("tile_bounds"):
-            tb = pkg_info["tile_bounds"]
-            if tb.get("min_lat") != 0 or tb.get("max_lat") != 0:
-                tile_bounds_data = TileBounds(
-                    min_lat=tb["min_lat"],
-                    max_lat=tb["max_lat"],
-                    min_lng=tb["min_lng"],
-                    max_lng=tb["max_lng"],
-                )
-
-        # 6. 构建响应
-        package_data = OfflinePackageData(
-            plan_id=request.plan_id,
-            package_id=result["package_id"],
-            version=result["version"],
-            file_size=result["file_size"],
-            created_at=pkg_info["created_at"] if pkg_info else "",
-            tile_bounds=tile_bounds_data,
-        )
-
-        return OfflinePackageResponse(
-            code=200,
-            message="离线包生成成功",
-            data=package_data,
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        print(f"生成离线包失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"生成离线包失败: {str(e)}")
+    return trip_service.generate_offline_package(db, request)
 
 
 @router.get("/offline-package/{package_id}")
@@ -710,19 +179,4 @@ async def download_offline_package(package_id: str):
 
     - **package_id**: 离线包唯一标识
     """
-    try:
-        file_path = offline_package_service.get_package_file_path(package_id)
-        if not file_path:
-            raise HTTPException(status_code=404, detail=f"离线包不存在或已过期，package_id: {package_id}")
-
-        return FileResponse(
-            path=file_path,
-            media_type="application/zip",
-            filename=f"{package_id}.zip",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"下载离线包失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"下载离线包失败: {str(e)}")
+    return trip_service.download_offline_package(package_id)

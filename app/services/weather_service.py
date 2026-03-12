@@ -6,6 +6,14 @@
 天气数据来源：Open-Meteo API（WMO天气代码）
 室内运动热量计算：基于METs公式（复用mets_service）
 """
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
+from app.crud import trip_plan_crud
+from app.services.ai_service import AIService
+
+ai_service = AIService()
+
 
 from typing import Dict, List, Optional, Any
 from app.services.mets_service import METsService
@@ -14,7 +22,7 @@ from app.services.mets_service import METsService
 class WeatherService:
     """
     天气评估与Plan B生成服务
-    
+
     职责：
     1. 根据WMO天气代码评估天气严重程度
     2. 综合温度、风速等因素判断是否适合户外运动
@@ -404,3 +412,39 @@ def get_weather_service() -> WeatherService:
     if _weather_service_instance is None:
         _weather_service_instance = WeatherService()
     return _weather_service_instance
+
+
+def get_weather_by_address(address: str) -> dict:
+    try:
+        weather = ai_service.get_weather_by_address(address)
+        return {"code": 200, "message": "获取成功", "data": weather}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取天气失败: {str(e)}")
+
+
+def get_weather_by_plan(db: Session, plan_id: int) -> dict:
+    try:
+        plan = trip_plan_crud.get_trip_plan_by_id(db, plan_id)
+        if not plan:
+            raise HTTPException(status_code=404, detail=f"行程不存在，planId: {plan_id}")
+
+        if plan.latitude is not None and plan.longitude is not None:
+            weather = ai_service.get_weather_by_coords(
+                plan.latitude, plan.longitude, address_hint=plan.destination
+            )
+        else:
+            if not plan.destination:
+                raise HTTPException(
+                    status_code=400, detail="该计划无坐标且目的地为空，无法查询天气"
+                )
+            weather = ai_service.get_weather_by_address(plan.destination)
+
+        return {"code": 200, "message": "获取成功", "data": weather}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取天气失败: {str(e)}")
