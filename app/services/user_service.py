@@ -92,36 +92,6 @@ def get_user_preferences(db: Session, user_id: int) -> UserPreferencesResponse:
         raise HTTPException(status_code=500, detail=f"获取用户偏好失败: {str(e)}")
 
 
-def get_user_data_legacy(
-    db: Session, nickname: str, password: str
-) -> UserPreferencesResponse:
-    try:
-        user = user_crud.get_user_by_nickname(db, nickname)
-        if not user:
-            raise HTTPException(
-                status_code=404,
-                detail=f"用户不存在，nickname: {nickname}",
-            )
-
-        password_valid = False
-        if user.password.startswith("$2b$"):
-            password_valid = verify_password(password, user.password)
-        else:
-            password_valid = (user.password == password)
-
-        if not password_valid:
-            raise HTTPException(status_code=401, detail="密码错误")
-
-        return UserPreferencesResponse(
-            code=200,
-            message="获取成功",
-            data=_build_preferences_data(user),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取用户偏好失败: {str(e)}")
-
 
 def login(db: Session, request: LoginRequest) -> LoginResponse:
     try:
@@ -133,10 +103,7 @@ def login(db: Session, request: LoginRequest) -> LoginResponse:
             )
 
         password_valid = False
-        if user.password.startswith("$2b$"):
-            password_valid = verify_password(request.password, user.password)
-        else:
-            password_valid = (user.password == request.password)
+        password_valid = verify_password(request.password, user.password)
 
         if not password_valid:
             raise HTTPException(status_code=401, detail="密码错误")

@@ -45,22 +45,6 @@ async def get_user_preferences(
     return user_service.get_user_preferences(db, userId)
 
 
-@router.get("/data", response_model=UserPreferencesResponse)
-async def get_user_data_legacy(
-    nickname: str,
-    password: str,
-    db: Session = Depends(get_db)
-):
-    """
-    获取用户偏好（旧版登录接口，兼容保留）
-
-    - **nickname**: 用户昵称
-    - **password**: 用户密码
-
-    注意：推荐使用 POST /api/user/login 接口进行登录，该接口返回JWT Token
-    """
-    return user_service.get_user_data_legacy(db, nickname, password)
-
 
 @router.post("/login", response_model=LoginResponse)
 async def login(

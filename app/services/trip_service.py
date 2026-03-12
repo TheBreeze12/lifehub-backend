@@ -41,12 +41,12 @@ from app.models.trip import (
 from app.services.ai_service import AIService
 from app.services.mets_service import METsService
 from app.services.route_optimization_service import get_route_optimization_service
-from app.services.weather_service import WeatherService
+from app.services.weather_service import WeatherService,get_weather_service
 from app.services.offline_package_service import OfflinePackageService
 
 ai_service = AIService()
 mets_service = METsService()
-weather_service = WeatherService()
+weather_service = get_weather_service()
 offline_package_service = OfflinePackageService()
 
 
