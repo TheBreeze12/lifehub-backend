@@ -33,6 +33,32 @@ class GenerateTripRequest(BaseModel):
         }
 
 
+class PlaceInfo(BaseModel):
+    """POI地点信息（来自高德地图，前端可直接用于地图标注）"""
+    poiId: Optional[str] = Field(None, description="高德POI唯一标识")
+    name: str = Field(..., description="地点名称")
+    address: Optional[str] = Field(None, description="详细地址")
+    latitude: Optional[float] = Field(None, description="纬度（GCJ-02坐标系）")
+    longitude: Optional[float] = Field(None, description="经度（GCJ-02坐标系）")
+    city: Optional[str] = Field(None, description="所在城市")
+    district: Optional[str] = Field(None, description="所在区县")
+    distance: Optional[float] = Field(None, description="距用户位置的距离（米）")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "poiId": "B000A8UIN8",
+                "name": "朝阳公园",
+                "address": "北京市朝阳区朝阳公园南路1号",
+                "latitude": 39.9340,
+                "longitude": 116.4737,
+                "city": "北京市",
+                "district": "朝阳区",
+                "distance": 1200.5
+            }
+        }
+
+
 class TripItemData(BaseModel):
     """行程节点数据"""
     dayIndex: int = Field(..., description="第几天（从1开始）")
@@ -42,21 +68,32 @@ class TripItemData(BaseModel):
     duration: Optional[int] = Field(None, description="预计时长（分钟）")
     cost: Optional[float] = Field(None, description="预计消耗卡路里（kcal），基于METs公式精准计算")
     notes: Optional[str] = Field(None, description="备注（包含METs计算依据）")
-    metsValue: Optional[float] = Field(None, description="METs值（Phase 19新增）")
-    calculationBasis: Optional[str] = Field(None, description="热量计算依据（Phase 19新增）")
+    metsValue: Optional[float] = Field(None, description="METs值")
+    calculationBasis: Optional[str] = Field(None, description="热量计算依据")
+    place: Optional[PlaceInfo] = Field(None, description="POI地点详情（含坐标，可直接用于地图标注）")
     
     class Config:
         json_schema_extra = {
             "example": {
                 "dayIndex": 1,
                 "startTime": "19:00",
-                "placeName": "北京中央公园",
+                "placeName": "朝阳公园",
                 "placeType": "walking",
                 "duration": 30,
                 "cost": 122.5,
                 "notes": "餐后散步，建议慢走",
                 "metsValue": 3.5,
-                "calculationBasis": "METs=3.5 × 70kg × 0.5h"
+                "calculationBasis": "METs=3.5 × 70kg × 0.5h",
+                "place": {
+                    "poiId": "B000A8UIN8",
+                    "name": "朝阳公园",
+                    "address": "北京市朝阳区朝阳公园南路1号",
+                    "latitude": 39.9340,
+                    "longitude": 116.4737,
+                    "city": "北京市",
+                    "district": "朝阳区",
+                    "distance": 1200.5
+                }
             }
         }
 

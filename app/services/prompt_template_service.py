@@ -246,43 +246,54 @@ class PromptTemplateService:
     @staticmethod
     def _builtin_trip_generation() -> dict:
         return {
-            "version": "1.0",
-            "description": "运动计划生成Prompt模板",
+            "version": "1.1",
+            "description": "运动计划生成Prompt模板（支持多活动拆分）",
             "system_prompt": (
                 "你是一位专业的运动规划师，擅长根据用户需求生成个性化的餐后运动计划。"
                 "你的回答必须是严格的JSON格式，不要包含任何额外文字。"
-                "运动计划应包含具体的运动类型、地点、时长和卡路里消耗。"
+                "核心原则：严格按照用户提到的每一项运动分别生成独立节点，时长必须与用户指定一致。"
             ),
             "few_shot_examples": [
                 {
                     "input": (
-                        "运动区域：北京朝阳公园\n"
-                        "运动日期：2026-03-01 至 2026-03-01（共1天）\n"
-                        "目标消耗卡路里：300 kcal"
+                        '用户原始需求："先散步15分钟，再慢跑20分钟，最后骑行1小时"\n'
+                        "运动区域：武汉市洪山区\n"
+                        "运动日期：2026-03-13 至 2026-03-13（共1天）\n"
+                        "目标消耗卡路里：400 kcal\n"
+                        "用户期望总运动时长：95 分钟。"
                     ),
                     "output": json.dumps({
-                        "title": "朝阳公园餐后健走计划",
-                        "destination": "北京朝阳公园",
-                        "startDate": "2026-03-01",
-                        "endDate": "2026-03-01",
+                        "title": "散步慢跑骑行综合健身",
+                        "destination": "武汉市洪山区",
+                        "startDate": "2026-03-13",
+                        "endDate": "2026-03-13",
                         "items": [
                             {
                                 "dayIndex": 1,
                                 "startTime": "19:00",
-                                "placeName": "北京朝阳公园",
+                                "placeName": "武汉东湖绿道",
                                 "placeType": "walking",
-                                "duration": 40,
-                                "cost": 180,
-                                "notes": "餐后健走，保持中等速度"
+                                "duration": 15,
+                                "cost": 50,
+                                "notes": "餐后轻松散步，热身准备"
                             },
                             {
                                 "dayIndex": 1,
-                                "startTime": "19:50",
-                                "placeName": "北京朝阳健身步道",
-                                "placeType": "running",
-                                "duration": 15,
-                                "cost": 120,
-                                "notes": "慢跑收尾，注意拉伸"
+                                "startTime": "19:20",
+                                "placeName": "武汉磨山健身步道",
+                                "placeType": "jogging",
+                                "duration": 20,
+                                "cost": 130,
+                                "notes": "慢跑提升心率，注意呼吸节奏"
+                            },
+                            {
+                                "dayIndex": 1,
+                                "startTime": "19:45",
+                                "placeName": "武汉东湖骑行道",
+                                "placeType": "cycling",
+                                "duration": 60,
+                                "cost": 220,
+                                "notes": "骑行收尾，保持匀速"
                             }
                         ]
                     }, ensure_ascii=False),
@@ -290,23 +301,29 @@ class PromptTemplateService:
             ],
             "user_prompt_template": (
                 "请为以下餐后运动需求生成详细的运动计划，并以JSON格式返回。\n\n"
+                '用户原始需求："{query}"\n\n'
                 "运动区域：{destination}\n"
                 "运动日期：{start_date} 至 {end_date}（共{days}天）\n"
                 "目标消耗卡路里：{calories_target} kcal\n"
+                "{duration_hint}\n"
                 "{exercise_type_text}\n"
                 "{preference_text}\n"
+                "{title_hint}\n"
                 "{calories_context}\n"
                 "{location_context}\n\n"
-                "要求：\n"
-                "1. 生成具体的运动安排，包括运动类型、地点、时长等\n"
-                "2. 合理安排运动强度和时间，确保能达到目标卡路里消耗\n"
-                "3. 考虑餐后运动的特点（建议餐后30-60分钟开始）\n"
-                "4. placeName必须是具体地点名称，不能用\"附近\"等模糊描述\n"
-                "5. placeType: walking/running/cycling/park/gym/indoor/outdoor\n"
-                "6. cost字段存储预计消耗卡路里（kcal）\n"
-                "7. title必须个性化，不要总是\"餐后运动计划\"\n"
-                "8. 多节点时placeName应各不相同\n\n"
-                "只返回JSON，不要其他解释。\n\n"
+                "核心规则：\n"
+                "1. **严格按照用户需求中提到的每一项运动分别生成独立节点**。"
+                "例如用户说\"先散步15分钟，再慢跑20分钟，最后骑行1小时\"，"
+                "则必须生成3个节点：散步(15min) + 慢跑(20min) + 骑行(60min)。\n"
+                "2. 每个节点的duration必须严格遵循用户指定的时长，不要自行更改。\n"
+                "3. 如果用户没指定具体运动，根据目标卡路里自行合理拆分多个节点。\n"
+                "4. 如果days>1，每天至少1个节点，dayIndex从1递增。\n"
+                "5. 每个节点包含：dayIndex, startTime(HH:mm), placeName(具体名称), "
+                "placeType(walking/running/cycling/jogging/park/gym/indoor/outdoor), "
+                "duration(分钟), cost(kcal), notes。\n"
+                "6. title个性化，反映运动内容。\n"
+                "7. 不同节点的placeName应各不相同。\n\n"
+                "仅返回JSON，不要其他解释。\n\n"
                 "返回格式：\n"
                 '{{\n'
                 '    "title": "个性化标题",\n'
@@ -316,11 +333,11 @@ class PromptTemplateService:
                 '    "items": [\n'
                 '        {{\n'
                 '            "dayIndex": 1,\n'
-                '            "startTime": "HH:mm",\n'
-                '            "placeName": "具体地点",\n'
+                '            "startTime": "19:00",\n'
+                '            "placeName": "具体地点A",\n'
                 '            "placeType": "walking",\n'
-                '            "duration": 30,\n'
-                '            "cost": 150,\n'
+                '            "duration": 15,\n'
+                '            "cost": 50,\n'
                 '            "notes": "运动建议"\n'
                 '        }}\n'
                 '    ]\n'

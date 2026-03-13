@@ -26,8 +26,10 @@ class TripItem(Base):
     )
     duration = Column(Integer, comment="预计时长（分钟）")
     cost = Column(Float, comment="预计消耗卡路里（kcal），原为费用字段，现语义转换为卡路里")
-    latitude = Column(Float, comment="纬度")
-    longitude = Column(Float, comment="经度")
+    latitude = Column(Float, comment="地点纬度（GCJ-02坐标系）")
+    longitude = Column(Float, comment="地点经度（GCJ-02坐标系）")
+    place_address = Column(String(200), comment="地点详细地址（来自POI）")
+    poi_id = Column(String(64), comment="高德POI唯一标识")
     notes = Column(Text, comment="备注")
     sort_order = Column(Integer, default=0, comment="排序序号")
     

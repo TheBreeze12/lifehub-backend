@@ -21,6 +21,7 @@ from app.models.trip import (
     GenerateTripResponse,
     TripData,
     TripItemData,
+    PlaceInfo,
     TripListResponse,
     TripSummary,
     TripDetailResponse,
@@ -53,17 +54,22 @@ offline_package_service = OfflinePackageService()
 def generate_trip(db: Session, request: GenerateTripRequest) -> GenerateTripResponse:
     try:
         preferences_dict = None
-        if request.preferences:
+        user = user_crud.get_user_by_id(db, request.userId)
+        if not request.preferences:
+            preferences_dict={
+                "healthGoal":user.health_goal,
+                "allergens":user.allergens
+            }
+        else:
             preferences_dict = {
                 "healthGoal": request.preferences.healthGoal,
                 "allergens": request.preferences.allergens or [],
             }
-
-        user = user_crud.get_user_by_id(db, request.userId)
+        
+        print(preferences_dict)
         user_weight = (
             user.weight if user and user.weight else mets_service.DEFAULT_WEIGHT_KG
         )
-
         today = date.today()
         today_records = diet_record_crud.get_diet_records_by_user_and_date(
             db, request.userId, today
@@ -124,6 +130,17 @@ def generate_trip(db: Session, request: GenerateTripRequest) -> GenerateTripResp
             )
             enhanced_notes = f"{original_notes} {mets_note}" if original_notes else mets_note
 
+            place_data = item_data.get("place")
+            item_lat = None
+            item_lng = None
+            item_address = None
+            item_poi_id = None
+            if isinstance(place_data, dict):
+                item_lat = place_data.get("latitude")
+                item_lng = place_data.get("longitude")
+                item_address = place_data.get("address")
+                item_poi_id = place_data.get("poi_id")
+
             trip_item = TripItem(
                 trip_id=trip_plan.id,
                 day_index=item_data.get("dayIndex", 1),
@@ -132,6 +149,10 @@ def generate_trip(db: Session, request: GenerateTripRequest) -> GenerateTripResp
                 place_type=item_data.get("placeType"),
                 duration=item_data.get("duration"),
                 cost=calories_burned,
+                latitude=item_lat,
+                longitude=item_lng,
+                place_address=item_address,
+                poi_id=item_poi_id,
                 notes=enhanced_notes,
                 sort_order=index,
             )
@@ -151,6 +172,16 @@ def generate_trip(db: Session, request: GenerateTripRequest) -> GenerateTripResp
                 f"METs={mets_value} × {user_weight}kg × {duration_hours:.2f}h"
             )
 
+            place_info = None
+            if item.latitude is not None and item.longitude is not None:
+                place_info = PlaceInfo(
+                    poiId=item.poi_id,
+                    name=item.place_name,
+                    address=item.place_address,
+                    latitude=item.latitude,
+                    longitude=item.longitude,
+                )
+
             items_data.append(
                 TripItemData(
                     dayIndex=item.day_index,
@@ -162,6 +193,7 @@ def generate_trip(db: Session, request: GenerateTripRequest) -> GenerateTripResp
                     notes=item.notes,
                     metsValue=mets_value,
                     calculationBasis=calculation_basis,
+                    place=place_info,
                 )
             )
 
@@ -210,6 +242,16 @@ def _trip_plan_to_data(
             f"METs={mets_value} × {user_weight}kg × {duration_hours:.2f}h"
         )
 
+        place_info = None
+        if item.latitude is not None and item.longitude is not None:
+            place_info = PlaceInfo(
+                poiId=item.poi_id,
+                name=item.place_name,
+                address=item.place_address,
+                latitude=item.latitude,
+                longitude=item.longitude,
+            )
+
         items_data.append(
             TripItemData(
                 dayIndex=item.day_index,
@@ -221,6 +263,7 @@ def _trip_plan_to_data(
                 notes=item.notes,
                 metsValue=mets_value,
                 calculationBasis=calculation_basis,
+                place=place_info,
             )
         )
 

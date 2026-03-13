@@ -46,6 +46,7 @@ async def generate_trip(
     - **latitude**: 用户当前位置纬度（可选）
     - **longitude**: 用户当前位置经度（可选）
     """
+    print(request)
     return trip_service.generate_trip(db, request)
 
 
