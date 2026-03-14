@@ -3,21 +3,21 @@
 
 根据天气状况评估是否适合户外运动，并在恶劣天气时生成室内替代方案（Plan B）。
 
-天气数据来源：Open-Meteo API（WMO天气代码）
+天气数据来源：高德地图天气服务（AMAP）
 室内运动热量计算：基于METs公式（复用mets_service）
 """
+import os
+import re
+
+import requests
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.crud import trip_plan_crud
-from app.services.ai_service import AIService
-
-ai_service = AIService()
 
 
 from typing import Dict, List, Optional, Any
 from app.services.mets_service import METsService
-
 
 class WeatherService:
     """
@@ -37,6 +37,9 @@ class WeatherService:
     EXTREME_HEAT_THRESHOLD = 38.0   # ℃
     # 大风阈值（km/h）
     HIGH_WIND_THRESHOLD = 50.0
+    # 高德 API
+    AMAP_GEOCODE_URL = "https://restapi.amap.com/v3/geocode/geo"
+    AMAP_WEATHER_URL = "https://restapi.amap.com/v3/weather/weatherInfo"
 
     # WMO天气代码分类
     # severity: good / mild / moderate / severe
@@ -158,9 +161,160 @@ class WeatherService:
         },
     ]
 
+    WEATHER_TEXT_MAP: Dict[str, Dict[str, str]] = {
+        "晴": {"severity": "good", "description": "晴"},
+        "多云": {"severity": "good", "description": "多云"},
+        "阴": {"severity": "mild", "description": "阴"},
+        "雾": {"severity": "mild", "description": "雾"},
+        "霾": {"severity": "moderate", "description": "霾"},
+        "小雨": {"severity": "mild", "description": "小雨"},
+        "中雨": {"severity": "moderate", "description": "中雨"},
+        "大雨": {"severity": "severe", "description": "大雨"},
+        "暴雨": {"severity": "severe", "description": "暴雨"},
+        "雷阵雨": {"severity": "severe", "description": "雷阵雨"},
+        "小雪": {"severity": "mild", "description": "小雪"},
+        "中雪": {"severity": "moderate", "description": "中雪"},
+        "大雪": {"severity": "severe", "description": "大雪"},
+        "雨夹雪": {"severity": "moderate", "description": "雨夹雪"},
+    }
+
     def __init__(self):
         """初始化天气服务"""
         self.mets_service = METsService()
+        self.amap_key = os.getenv("AMAP_KEY", "")
+
+    def geocode_address(self, address: str) -> Optional[Dict[str, Any]]:
+        """使用高德地理编码将地址转为经纬度和adcode。"""
+        if not address:
+            return None
+        if not self.amap_key:
+            raise ValueError("未配置 AMAP_KEY，无法使用高德天气服务")
+        params = {
+            "key": self.amap_key,
+            "address": address,
+            "output": "JSON",
+        }
+        resp = requests.get(self.AMAP_GEOCODE_URL, params=params, timeout=8)
+        data = resp.json()
+        if data.get("status") != "1" or not data.get("geocodes"):
+            raise ValueError(f"高德地理编码失败: {data.get('info', '未知错误')}")
+        geocode = data["geocodes"][0]
+        loc = geocode.get("location", "")
+        if not loc or "," not in loc:
+            raise ValueError("高德地理编码返回缺少location")
+        lng_str, lat_str = loc.split(",", 1)
+        return {
+            "latitude": float(lat_str),
+            "longitude": float(lng_str),
+            "adcode": geocode.get("adcode"),
+            "formatted_address": geocode.get("formatted_address") or address,
+        }
+
+    def get_weather_by_address(self, address: str) -> dict:
+        """通过地址查询高德实况天气。"""
+        if not address:
+            raise ValueError("地址不能为空")
+        geo = self.geocode_address(address)
+        if not geo:
+            raise ValueError("无法解析地址为坐标")
+        weather = self._get_weather_by_adcode(geo.get("adcode"), address_hint=address)
+        weather["latitude"] = geo.get("latitude")
+        weather["longitude"] = geo.get("longitude")
+        weather["formatted_address"] = geo.get("formatted_address")
+        return weather
+
+    def get_weather_by_coords(self, latitude: float, longitude: float, address_hint: str | None = None) -> dict:
+        """通过经纬度查询高德实况天气（先逆地理拿adcode）。"""
+        if latitude is None or longitude is None:
+            raise ValueError("经纬度不能为空")
+        if not self.amap_key:
+            raise ValueError("未配置 AMAP_KEY，无法使用高德天气服务")
+        regeo_url = "https://restapi.amap.com/v3/geocode/regeo"
+        params = {
+            "key": self.amap_key,
+            "location": f"{longitude},{latitude}",
+            "extensions": "base",
+            "output": "JSON",
+        }
+        resp = requests.get(regeo_url, params=params, timeout=8)
+        data = resp.json()
+        if data.get("status") != "1":
+            raise ValueError(f"高德逆地理编码失败: {data.get('info', '未知错误')}")
+        addr = (data.get("regeocode") or {}).get("addressComponent") or {}
+        adcode = addr.get("adcode")
+        if not adcode:
+            raise ValueError("高德逆地理编码返回缺少adcode")
+        weather = self._get_weather_by_adcode(adcode, address_hint=address_hint)
+        weather["latitude"] = latitude
+        weather["longitude"] = longitude
+        weather["adcode"] = adcode
+        return weather
+
+    def _get_weather_by_adcode(self, adcode: str, address_hint: Optional[str] = None) -> dict:
+        """调用高德天气实况接口并转成统一结构。"""
+        if not adcode:
+            raise ValueError("adcode不能为空")
+        params = {
+            "key": self.amap_key,
+            "city": adcode,
+            "extensions": "base",
+            "output": "JSON",
+        }
+        resp = requests.get(self.AMAP_WEATHER_URL, params=params, timeout=8)
+        data = resp.json()
+        if data.get("status") != "1" or not data.get("lives"):
+            raise ValueError(f"高德天气查询失败: {data.get('info', '未知错误')}")
+        live = data["lives"][0]
+        weather_text = (live.get("weather") or "").strip()
+        windspeed_kmh = self._windpower_to_kmh(live.get("windpower"))
+        return {
+            "address": address_hint,
+            "province": live.get("province"),
+            "city": live.get("city"),
+            "adcode": live.get("adcode"),
+            "temperature": self._to_float(live.get("temperature")),
+            "humidity": self._to_float(live.get("humidity")),
+            "windspeed": windspeed_kmh,
+            "winddirection": live.get("winddirection"),
+            "weather": weather_text,
+            "weathercode": None,
+            "time": live.get("reporttime"),
+            "source": "amap",
+        }
+
+    @staticmethod
+    def _to_float(value: Any) -> Optional[float]:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _windpower_to_kmh(windpower: Any) -> Optional[float]:
+        """将高德风力等级转换为约等km/h。"""
+        if windpower is None:
+            return None
+        text = str(windpower).strip()
+        nums = [int(x) for x in re.findall(r"\d+", text)]
+        if not nums:
+            return None
+        level = nums[-1]
+        level_to_kmh = {
+            0: 1.0,
+            1: 4.0,
+            2: 8.5,
+            3: 15.5,
+            4: 24.5,
+            5: 34.5,
+            6: 44.5,
+            7: 56.0,
+            8: 67.5,
+            9: 80.0,
+            10: 93.0,
+            11: 107.0,
+            12: 122.0,
+        }
+        return level_to_kmh.get(level, 122.0 if level > 12 else None)
 
     def evaluate_weather_code(self, weathercode: int) -> Dict[str, str]:
         """
@@ -218,12 +372,15 @@ class WeatherService:
             }
 
         weathercode = weather_data.get("weathercode")
+        weather_text = str(weather_data.get("weather") or "").strip()
         temperature = weather_data.get("temperature")
         windspeed = weather_data.get("windspeed")
 
         # 1. 评估天气代码
         if weathercode is not None:
             code_eval = self.evaluate_weather_code(weathercode)
+        elif weather_text:
+            code_eval = self._evaluate_weather_text(weather_text)
         else:
             code_eval = {"severity": "good", "description": "天气信息不完整"}
 
@@ -273,6 +430,17 @@ class WeatherService:
                 result["wind_warning"] = next(w for w in warnings if "风" in w)
 
         return result
+
+    def _evaluate_weather_text(self, weather_text: str) -> Dict[str, str]:
+        """根据高德中文天气描述评估严重程度。"""
+        if not weather_text:
+            return {"severity": "good", "description": "天气信息不完整"}
+        # 优先匹配更长词，避免“雨”覆盖“暴雨”
+        for key in sorted(self.WEATHER_TEXT_MAP.keys(), key=len, reverse=True):
+            if key in weather_text:
+                mapped = self.WEATHER_TEXT_MAP[key]
+                return {"severity": mapped["severity"], "description": weather_text}
+        return {"severity": "mild", "description": weather_text}
 
     def get_indoor_exercises(self) -> List[Dict[str, Any]]:
         """
@@ -416,7 +584,7 @@ def get_weather_service() -> WeatherService:
 
 def get_weather_by_address(address: str) -> dict:
     try:
-        weather = ai_service.get_weather_by_address(address)
+        weather = get_weather_service().get_weather_by_address(address)
         return {"code": 200, "message": "获取成功", "data": weather}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -430,16 +598,19 @@ def get_weather_by_plan(db: Session, plan_id: int) -> dict:
         if not plan:
             raise HTTPException(status_code=404, detail=f"行程不存在，planId: {plan_id}")
 
+        weather_service = get_weather_service()
         if plan.latitude is not None and plan.longitude is not None:
-            weather = ai_service.get_weather_by_coords(
-                plan.latitude, plan.longitude, address_hint=plan.destination
+            weather = weather_service.get_weather_by_coords(
+                plan.latitude,
+                plan.longitude,
+                address_hint=plan.destination,
             )
         else:
             if not plan.destination:
                 raise HTTPException(
                     status_code=400, detail="该计划无坐标且目的地为空，无法查询天气"
                 )
-            weather = ai_service.get_weather_by_address(plan.destination)
+            weather = weather_service.get_weather_by_address(plan.destination)
 
         return {"code": 200, "message": "获取成功", "data": weather}
     except HTTPException:

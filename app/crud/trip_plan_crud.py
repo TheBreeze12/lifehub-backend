@@ -74,3 +74,10 @@ def delete_trip_plans_by_user(db: Session, user_id: int) -> int:
         .filter(TripPlan.user_id == user_id)
         .delete(synchronize_session=False)
     )
+
+def delete_trip_plans_by_id(db:Session,id:int)->int:
+    return (
+        db.query(TripPlan)
+        .filter(TripPlan.id==id)
+        .delete(synchronize_session=False)
+    )

@@ -83,6 +83,8 @@ CREATE TABLE `trip_plan` (
   `travelers` json DEFAULT NULL COMMENT '同行人员，JSON格式: ["本人", "父母"]',
   `is_offline` int DEFAULT '0' COMMENT '是否已下载离线包（0/1）',
   `offline_size` int DEFAULT NULL COMMENT '离线包大小（字节）',
+  `route_cache` json DEFAULT NULL COMMENT '已生成路线缓存（JSON）',
+  `route_cache_updated_at` timestamp NULL DEFAULT NULL COMMENT '路线缓存更新时间',
   PRIMARY KEY (`id`),
   KEY `idx_user` (`user_id`),
   CONSTRAINT `trip_plan_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`)

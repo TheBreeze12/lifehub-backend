@@ -19,7 +19,7 @@ class GenerateTripRequest(BaseModel):
     preferences: Optional[TripPreferences] = Field(None, description="用户偏好")
     latitude: Optional[float] = Field(None, description="用户当前位置纬度", ge=-90, le=90)
     longitude: Optional[float] = Field(None, description="用户当前位置经度", ge=-180, le=180)
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -71,7 +71,7 @@ class TripItemData(BaseModel):
     metsValue: Optional[float] = Field(None, description="METs值")
     calculationBasis: Optional[str] = Field(None, description="热量计算依据")
     place: Optional[PlaceInfo] = Field(None, description="POI地点详情（含坐标，可直接用于地图标注）")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -106,7 +106,7 @@ class TripData(BaseModel):
     startDate: str = Field(..., description="开始日期（YYYY-MM-DD）")
     endDate: str = Field(..., description="结束日期（YYYY-MM-DD）")
     items: List[TripItemData] = Field(default_factory=list, description="行程节点列表")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -134,7 +134,7 @@ class GenerateTripResponse(BaseModel):
     code: int = Field(..., description="状态码，200表示成功")
     message: str = Field(..., description="消息")
     data: Optional[TripData] = Field(None, description="行程数据")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -161,7 +161,7 @@ class TripSummary(BaseModel):
     endDate: str = Field(..., description="结束日期（YYYY-MM-DD）")
     status: Optional[str] = Field(None, description="状态: planning/ongoing/done")
     itemCount: int = Field(0, description="行程节点数量")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -181,7 +181,7 @@ class TripListResponse(BaseModel):
     code: int = Field(..., description="状态码，200表示成功")
     message: str = Field(..., description="消息")
     data: Optional[List[TripSummary]] = Field(None, description="行程列表")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -207,7 +207,7 @@ class TripDetailResponse(BaseModel):
     code: int = Field(..., description="状态码，200表示成功")
     message: str = Field(..., description="消息")
     data: Optional[TripData] = Field(None, description="行程详情")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -233,7 +233,7 @@ class RouteWaypoint(BaseModel):
     lng: float = Field(..., description="经度", ge=-180, le=180)
     order: int = Field(0, description="顺序")
     type: str = Field("waypoint", description="类型: start/waypoint/end")
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -241,6 +241,26 @@ class RouteWaypoint(BaseModel):
                 "lng": 116.4074,
                 "order": 0,
                 "type": "start"
+            }
+        }
+
+
+class NavigationStep(BaseModel):
+    """单条导航步骤"""
+    instruction: str = Field("", description="导航文案")
+    orientation: Optional[str] = Field(None, description="方向")
+    road: Optional[str] = Field(None, description="道路名称")
+    distance_meters: Optional[float] = Field(None, description="步骤距离（米）", ge=0)
+    duration_seconds: Optional[float] = Field(None, description="步骤时长（秒）", ge=0)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "instruction": "沿四眼井路向西北步行268米右转",
+                "orientation": "西北",
+                "road": "四眼井路",
+                "distance_meters": 268,
+                "duration_seconds": 214
             }
         }
 
@@ -254,9 +274,10 @@ class ParetoRoute(BaseModel):
     greenery_score: float = Field(..., description="绿化评分（0-100）", ge=0, le=100)
     distance_meters: float = Field(..., description="距离（米）", ge=0)
     waypoints: List[RouteWaypoint] = Field(default_factory=list, description="路径点列表")
+    navigation_steps: List[NavigationStep] = Field(default_factory=list, description="导航步骤列表")
     exercise_type: Optional[str] = Field(None, description="运动类型")
     intensity: Optional[float] = Field(None, description="运动强度（0-1）", ge=0, le=1)
-    
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -271,6 +292,15 @@ class ParetoRoute(BaseModel):
                     {"lat": 39.9052, "lng": 116.4084, "order": 1, "type": "waypoint"},
                     {"lat": 39.9042, "lng": 116.4074, "order": 2, "type": "end"}
                 ],
+                "navigation_steps": [
+                    {
+                        "instruction": "沿四眼井路向西北步行268米右转",
+                        "orientation": "西北",
+                        "road": "四眼井路",
+                        "distance_meters": 268,
+                        "duration_seconds": 214
+                    }
+                ],
                 "exercise_type": "walking",
                 "intensity": 0.8
             }
@@ -279,16 +309,20 @@ class ParetoRoute(BaseModel):
 
 class GenerateRoutesRequest(BaseModel):
     """生成帕累托路径请求"""
-    start_lat: float = Field(..., description="起点纬度", ge=-90, le=90)
-    start_lng: float = Field(..., description="起点经度", ge=-180, le=180)
-    target_calories: float = Field(..., description="目标热量消耗（kcal）", gt=0)
+    plan_id: Optional[int] = Field(None, description="运动计划ID（优先使用数据库trip_item真实数据）", gt=0)
+    force_regenerate: bool = Field(False, description="是否强制重新生成路线；false时优先返回已缓存路线")
+    start_lat: Optional[float] = Field(None, description="起点纬度（未提供plan_id时必填）", ge=-90, le=90)
+    start_lng: Optional[float] = Field(None, description="起点经度（未提供plan_id时必填）", ge=-180, le=180)
+    target_calories: Optional[float] = Field(None, description="目标热量消耗（kcal）；为空时从计划项估算", gt=0)
     max_time_minutes: Optional[int] = Field(60, description="最大运动时间（分钟）", gt=0, le=240)
-    exercise_type: Optional[str] = Field("walking", description="运动类型: walking/running/cycling/jogging/hiking")
-    weight_kg: Optional[float] = Field(70.0, description="用户体重（kg）", gt=0, le=500)
-    
+    exercise_type: Optional[str] = Field(None, description="运动类型: walking/running/cycling/jogging/hiking；为空时按计划项推断")
+    weight_kg: Optional[float] = Field(None, description="用户体重（kg）；为空时取用户档案或默认值", gt=0, le=500)
+
     class Config:
         json_schema_extra = {
             "example": {
+                "plan_id": 1001,
+                "force_regenerate": False,
                 "start_lat": 39.9042,
                 "start_lng": 116.4074,
                 "target_calories": 300,
@@ -308,7 +342,8 @@ class RoutesResponseData(BaseModel):
     exercise_type: str = Field(..., description="运动类型")
     weight_kg: float = Field(..., description="用户体重")
     n_routes: int = Field(..., description="返回的路径数量")
-    
+    cache_hit: bool = Field(False, description="是否命中已缓存路线")
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -318,7 +353,8 @@ class RoutesResponseData(BaseModel):
                 "max_time_minutes": 60,
                 "exercise_type": "walking",
                 "weight_kg": 70.0,
-                "n_routes": 3
+                "n_routes": 3,
+                "cache_hit": False
             }
         }
 
@@ -328,7 +364,7 @@ class GenerateRoutesResponse(BaseModel):
     code: int = Field(..., description="状态码，200表示成功")
     message: str = Field(..., description="消息")
     data: Optional[RoutesResponseData] = Field(None, description="路径数据")
-    
+
     class Config:
         json_schema_extra = {
             "example": {

@@ -22,6 +22,8 @@ class TripPlan(Base):
     travelers = Column(JSON, comment="同行人员，JSON格式: [\"本人\", \"父母\"]")
     is_offline = Column(Integer, default=0, comment="是否已下载离线包（0/1）")
     offline_size = Column(Integer, comment="离线包大小（字节）")
+    route_cache = Column(JSON, comment="已生成路线缓存（JSON）")
+    route_cache_updated_at = Column(TIMESTAMP, nullable=True, comment="路线缓存更新时间")
     status = Column(
         String(20),
         default="planning",

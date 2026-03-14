@@ -121,6 +121,65 @@ class OfflinePackageService:
             pois.append(poi)
         return pois
 
+    def extract_route_data(self, route_cache: Optional[dict]) -> list:
+        """
+        从 trip_plan.route_cache 提取路线数据（若存在）。
+
+        Args:
+            route_cache: TripPlan.route_cache JSON
+
+        Returns:
+            路线列表，结构可直接写入 routes.json
+        """
+        if not isinstance(route_cache, dict):
+            return []
+
+        data = route_cache.get("data")
+        if not isinstance(data, dict):
+            return []
+
+        routes = data.get("routes")
+        if not isinstance(routes, list):
+            return []
+
+        valid_routes = []
+        for route in routes:
+            if not isinstance(route, dict):
+                continue
+            waypoints = route.get("waypoints")
+            if not isinstance(waypoints, list):
+                continue
+            valid_routes.append(route)
+        return valid_routes
+
+    def collect_coordinate_points(self, plan, items: list, routes: Optional[list] = None) -> List[dict]:
+        """
+        汇总所有可用坐标点（计划起点、POI、路线轨迹）用于离线瓦片范围估算。
+        """
+        coord_points: List[dict] = []
+
+        if plan.latitude is not None and plan.longitude is not None:
+            coord_points.append({"latitude": plan.latitude, "longitude": plan.longitude})
+
+        for item in items:
+            if item.latitude is not None and item.longitude is not None:
+                coord_points.append({"latitude": item.latitude, "longitude": item.longitude})
+
+        for route in routes or []:
+            waypoints = route.get("waypoints") if isinstance(route, dict) else None
+            if not isinstance(waypoints, list):
+                continue
+            for wp in waypoints:
+                if not isinstance(wp, dict):
+                    continue
+                lat = wp.get("lat")
+                lng = wp.get("lng")
+                if lat is None or lng is None:
+                    continue
+                coord_points.append({"latitude": lat, "longitude": lng})
+
+        return coord_points
+
     # ----------------------------------------------------------
     # 3. 地图瓦片区域计算
     # ----------------------------------------------------------
@@ -213,13 +272,14 @@ class OfflinePackageService:
     # ----------------------------------------------------------
     # 4. 离线包生成（ZIP打包）
     # ----------------------------------------------------------
-    def generate_package(self, plan, items: list) -> dict:
+    def generate_package(self, plan, items: list, route_cache: Optional[dict] = None) -> dict:
         """
         生成完整的离线运动包（ZIP格式）
 
         Args:
             plan: TripPlan ORM 对象
             items: TripItem ORM 对象列表
+            route_cache: trip_plan.route_cache（可选）
 
         Returns:
             包信息字典: package_id, file_path, file_size, version
@@ -236,14 +296,10 @@ class OfflinePackageService:
         # 生成各部分数据
         plan_text = self.generate_plan_text(plan, items)
         pois = self.extract_poi_data(items)
+        routes = self.extract_route_data(route_cache)
 
-        # 收集坐标点（含plan本身的坐标和items的坐标）
-        coord_points = []
-        if plan.latitude is not None and plan.longitude is not None:
-            coord_points.append({"latitude": plan.latitude, "longitude": plan.longitude})
-        for item in items:
-            if item.latitude is not None and item.longitude is not None:
-                coord_points.append({"latitude": item.latitude, "longitude": item.longitude})
+        # 汇总坐标点（计划起点 + 项目POI + 已生成路线轨迹）
+        coord_points = self.collect_coordinate_points(plan, items, routes)
 
         tiles_meta = self.calculate_tile_bounds(coord_points)
 
@@ -254,7 +310,8 @@ class OfflinePackageService:
             "version": current_version,
             "created_at": datetime.now().isoformat(),
             "format_version": "1.0",
-            "contents": ["plan.json", "pois.json", "tiles_meta.json"],
+            "contents": ["plan.json", "pois.json", "tiles_meta.json", "routes.json"],
+            "route_count": len(routes),
         }
 
         # 打包为ZIP
@@ -267,6 +324,7 @@ class OfflinePackageService:
             zf.writestr("plan.json", json.dumps(plan_text, ensure_ascii=False, indent=2))
             zf.writestr("pois.json", json.dumps(pois, ensure_ascii=False, indent=2))
             zf.writestr("tiles_meta.json", json.dumps(tiles_meta, ensure_ascii=False, indent=2))
+            zf.writestr("routes.json", json.dumps(routes, ensure_ascii=False, indent=2))
 
         file_size = os.path.getsize(file_path)
 

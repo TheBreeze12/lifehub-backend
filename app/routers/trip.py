@@ -67,6 +67,7 @@ async def get_trip_list(
     return trip_service.get_trip_list(db, userId)
 
 
+
 @router.get("/recent", response_model=TripListResponse)
 async def get_recent_trips(
     userId: int,
@@ -95,6 +96,10 @@ async def get_home_trips(
     - **limit**: 返回数量限制（默认3条）
     """
     return trip_service.get_home_trips(db, userId, limit)
+
+@router.delete("/{plan_id}")
+async def delete_trip_plan(plan_id : int,db=Depends(get_db)):
+    return trip_service.delete_trip_by_id(db,plan_id)
 
 
 # ==================== Phase 32: 天气动态调整 Plan B 接口 ====================
@@ -133,25 +138,29 @@ async def get_trip_detail(
 
 @router.post("/routes", response_model=GenerateRoutesResponse)
 async def generate_pareto_routes(
-    request: GenerateRoutesRequest
+    request: GenerateRoutesRequest,
+    db: Session = Depends(get_db),
 ):
     """
-    生成帕累托最优运动路径（2-3条）
+    生成运动路线（顺序步行导航）
 
-    基于NSGA-II多目标优化算法，同时优化：
-    - 最短时间
-    - 最大热量消耗
-    - 最佳绿化评分
+    新逻辑：
+    1) 起点固定使用 trip_plan 的坐标；
+    2) 按 trip_items 的顺序（day_index/start_time/sort_order）依次导航；
+    3) 每一段调用高德 Web 服务步行导航（new route）；
+    4) 仅返回一条清晰路线，并可写入缓存。
 
-    - **start_lat**: 起点纬度
-    - **start_lng**: 起点经度
-    - **target_calories**: 目标热量消耗（kcal）
+    注意：该接口现在必须传 plan_id，不再支持无计划的起点直传模式。
+
+    - **plan_id**: 运动计划ID（必填）
+    - **target_calories**: 目标热量消耗（kcal，可选）
     - **max_time_minutes**: 最大运动时间（分钟，默认60）
-    - **exercise_type**: 运动类型（walking/running/cycling/jogging/hiking）
-    - **weight_kg**: 用户体重（kg，默认70）
+    - **exercise_type**: 运动类型（可选，未传时按计划推断）
+    - **weight_kg**: 用户体重（kg，可选）
     """
-    return trip_service.generate_pareto_routes(request)
-
+    a = trip_service.generate_pareto_routes(db, request)
+    print(a)
+    return a
 
 # ==================== Phase 46: 离线运动包接口 ====================
 
@@ -163,7 +172,11 @@ async def generate_offline_package(
     """
     生成离线运动包
 
-    根据运动计划ID，打包运动方案文本、POI数据、地图瓦片元数据为ZIP离线包。
+    根据运动计划ID，基于现有 trip_plan/trip_item 数据打包离线内容。
+    若该计划已有已生成路线缓存（route_cache），会一并打包 routes.json，
+    并将路线轨迹坐标纳入地图瓦片覆盖范围估算。
+
+    打包内容：plan.json、pois.json、tiles_meta.json、routes.json（可为空）。
     支持同一计划多次生成（版本递增）。
 
     - **plan_id**: 运动计划ID（必须大于0）

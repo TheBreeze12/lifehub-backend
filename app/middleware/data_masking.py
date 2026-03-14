@@ -225,7 +225,7 @@ def mask_sensitive_text_in_dict(data: Any) -> Any:
 # 4. 综合脱敏入口
 # ============================================================
 
-def apply_response_masking(data: Any) -> Any:
+def apply_response_masking(data: Any, fuzz_coords: bool = True) -> Any:
     """
     对响应数据应用全部脱敏规则：
     1. 敏感字段脱敏（password/token/secret）
@@ -235,12 +235,13 @@ def apply_response_masking(data: Any) -> Any:
     if not isinstance(data, (dict, list)):
         return data
     result = mask_sensitive_fields_in_dict(data)
-    result = fuzz_coords_in_dict(result)
+    if fuzz_coords:
+        result = fuzz_coords_in_dict(result)
     result = mask_sensitive_text_in_dict(result)
     return result
 
 
-def apply_request_masking(data: Any) -> Any:
+def apply_request_masking(data: Any, fuzz_coords: bool = True) -> Any:
     """
     对请求数据应用脱敏规则：
     1. 坐标模糊化（位置信息模糊化）
@@ -248,9 +249,20 @@ def apply_request_masking(data: Any) -> Any:
     """
     if not isinstance(data, (dict, list)):
         return data
-    result = fuzz_coords_in_dict(data)
+    result = fuzz_coords_in_dict(data) if fuzz_coords else data
     result = mask_sensitive_text_in_dict(result)
     return result
+
+
+def should_skip_coord_fuzz(path: str) -> bool:
+    """对需要精确坐标的接口禁用坐标模糊化。"""
+    if not path:
+        return False
+    normalized = path.lower()
+    precise_paths = {
+        "/api/trip/routes",
+    }
+    return normalized in precise_paths
 
 
 # ============================================================
@@ -291,11 +303,13 @@ class DataMaskingMiddleware(BaseHTTPMiddleware):
     数据脱敏中间件：
     - 请求体：模糊化坐标、脱敏文本中的手机号/邮箱
     - 响应体：脱敏敏感字段、模糊化坐标、脱敏文本
-    
+
     仅处理 application/json 类型的请求和响应
     """
 
     async def dispatch(self, request: Request, call_next):
+        skip_coord_fuzz = should_skip_coord_fuzz(request.url.path)
+
         # --- 请求体脱敏 ---
         content_type = request.headers.get("content-type", "")
         if "application/json" in content_type:
@@ -303,7 +317,7 @@ class DataMaskingMiddleware(BaseHTTPMiddleware):
                 body_bytes = await request.body()
                 if body_bytes:
                     body_json = json.loads(body_bytes)
-                    masked_body = apply_request_masking(body_json)
+                    masked_body = apply_request_masking(body_json, fuzz_coords=not skip_coord_fuzz)
                     masked_bytes = json.dumps(masked_body, ensure_ascii=False).encode("utf-8")
 
                     # 替换请求体：创建一个新的receive函数
@@ -332,7 +346,7 @@ class DataMaskingMiddleware(BaseHTTPMiddleware):
 
                 if body_bytes:
                     body_json = json.loads(body_bytes)
-                    masked_json = apply_response_masking(body_json)
+                    masked_json = apply_response_masking(body_json, fuzz_coords=not skip_coord_fuzz)
                     # 使用与FastAPI一致的紧凑JSON序列化格式，避免content-length不匹配
                     masked_bytes = json.dumps(
                         masked_json, ensure_ascii=False, separators=(",", ":")
